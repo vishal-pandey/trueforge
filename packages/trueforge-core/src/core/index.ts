@@ -156,6 +156,18 @@ export type { CodeModeErrorSource, CodeModeReply, CodeModeRequest } from './sand
 export { DaytonaSandboxProvider } from './sandbox/provider/DaytonaProvider';
 export type { DaytonaSandboxProviderOptions } from './sandbox/provider/DaytonaProvider';
 export { absolutizeRelativeExecEnv } from './sandbox/provider/execEnv';
+export { ClientNodeSandboxCluster } from './sandbox/provider/kubernetes/ClientNodeSandboxCluster';
+export { ClusterExecTimeoutError } from './sandbox/provider/kubernetes/KubernetesSandboxCluster';
+export type {
+  ClusterExecParams,
+  ClusterExecResult,
+  KubernetesSandboxCluster,
+  SandboxPod,
+} from './sandbox/provider/kubernetes/KubernetesSandboxCluster';
+export { KubernetesSandboxProvider } from './sandbox/provider/kubernetes/KubernetesSandboxProvider';
+export type { KubernetesSandboxProviderOptions } from './sandbox/provider/kubernetes/KubernetesSandboxProvider';
+export { buildSandboxManifest } from './sandbox/provider/kubernetes/sandboxManifest';
+export type { SandboxManifest, SandboxResources } from './sandbox/provider/kubernetes/sandboxManifest';
 export { ensureExecSuccess, shellEscape } from './sandbox/provider/Provider';
 export type {
   ExecErrorResult,

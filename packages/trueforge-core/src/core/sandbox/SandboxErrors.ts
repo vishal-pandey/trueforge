@@ -48,7 +48,7 @@ export class SandboxFileTooLargeError extends SandboxError {
   }
 }
 
-class SandboxTenantMismatchError extends SandboxError {
+export class SandboxTenantMismatchError extends SandboxError {
   readonly statusCode = 403;
 
   constructor(requestTenant: string) {
