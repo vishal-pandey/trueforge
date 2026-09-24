@@ -1,7 +1,9 @@
 /** Sandbox provider construction + Daytona snapshot status refresh. */
 import { Daytona, DaytonaError } from '@daytona/sdk';
 import {
+  ClientNodeSandboxCluster,
   DaytonaSandboxProvider,
+  KubernetesSandboxProvider,
   SANDBOX_IMAGE_URI,
   TFYSandboxProvider,
   withTimeout,
@@ -17,6 +19,18 @@ import {
   type SandboxProviderManifest,
   type SandboxStatus,
 } from '../schemas/sandboxProvider';
+
+/** One cluster client per namespace for the process (kubeconfig/SA token loaded once). */
+const clusterByNamespace = new Map<string, ClientNodeSandboxCluster>();
+
+function clusterFor(namespace: string): ClientNodeSandboxCluster {
+  let cluster = clusterByNamespace.get(namespace);
+  if (!cluster) {
+    cluster = ClientNodeSandboxCluster.fromEnvironment(namespace);
+    clusterByNamespace.set(namespace, cluster);
+  }
+  return cluster;
+}
 
 /** Daytona rejected the credentials (401 unauthorized); retrying the same key cannot succeed. */
 export function isDaytonaAuthError(error: unknown): boolean {
@@ -89,6 +103,18 @@ export function toSandboxProviderFromRecord({
         defaultExecTimeoutMs: record.manifest.exec_timeout_ms,
         logger,
       });
+    case 'kubernetes':
+      return new KubernetesSandboxProvider({
+        cluster: clusterFor(record.manifest.namespace),
+        namespace: record.manifest.namespace,
+        tenantName: tenant_id,
+        sandboxImage: record.manifest.image,
+        defaultExecTimeoutMs: record.manifest.exec_timeout_ms,
+        idleTtlMinutes: record.manifest.idle_ttl_minutes,
+        runtimeClassName: record.manifest.runtime_class_name ?? undefined,
+        fileMaxBytesForDownload: configuration.SANDBOX_FILE_MAX_BYTES_FOR_DOWNLOAD,
+        logger,
+      });
   }
 }
 
@@ -131,8 +157,8 @@ export async function checkSnapshotStatus({
 
   const persisted = sandboxStatusFromRecord(record);
 
-  // Prebuilt image — no snapshot registration or refresh.
-  if (record.manifest.type === 'truefoundry') {
+  // Prebuilt images — no snapshot registration or refresh.
+  if (record.manifest.type === 'truefoundry' || record.manifest.type === 'kubernetes') {
     return persisted;
   }
 

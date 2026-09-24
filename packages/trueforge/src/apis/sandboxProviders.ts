@@ -128,7 +128,28 @@ export function createSandboxProvidersRouter<TTransaction>(deps: SandboxProvider
     }
   };
 
+  /** Read-only view of a server-managed provider (Kubernetes); 404 when settings are tenant-managed. */
+  const managedHandler = async (c: Context) => {
+    const requestContext = deps.resolveRequestContext(c);
+    const record = await deps.resolveSandboxProviderStore(c).getSandboxProvider(requestContext.tenant_id);
+    if (record?.manifest.type !== 'kubernetes') {
+      return c.json({ error: { message: 'No server-managed sandbox provider' } }, 404);
+    }
+    return c.json(
+      {
+        data: {
+          type: 'kubernetes',
+          name: 'Kubernetes (homelab)',
+          namespace: record.manifest.namespace,
+          status: record.status,
+        },
+      },
+      200,
+    );
+  };
+
   const router = new OpenAPIHono();
+  router.get('/managed', managedHandler);
   router.openapi(getSandboxProviderRoute, getHandler);
   router.openapi(putSandboxProviderRoute, putHandler);
   return router;

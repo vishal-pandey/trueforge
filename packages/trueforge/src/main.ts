@@ -91,6 +91,8 @@ import type { IOAuthTokenStore } from './mcp/auth/types';
 import { PACKAGE_VERSION } from './packageVersion';
 import { ActiveTurnRegistry } from './runtime/activeTurns';
 import { EventSubscriptionRegistry } from './runtime/event-subscription';
+import { readKubernetesSandboxConfig } from './sandbox/kubernetes/kubernetesSandboxConfig';
+import { KubernetesSandboxProviderStore } from './sandbox/kubernetes/KubernetesSandboxProviderStore';
 import { printStandaloneStartupBanner } from './startupBanner';
 import { InlineMcpServerStore } from './truefoundry/InlineMcpServerStore';
 import { parseInlineMcpServers, parseInlineSkills, X_TFG_MCP, X_TFG_SKILLS } from './truefoundry/inlineResources';
@@ -273,6 +275,11 @@ function buildResolveSandboxProviderStore<TTransaction>(options: {
   persistenceStore: ISandboxProviderStore<TTransaction>;
 }): (rc: RequestContext) => ISandboxProviderStore<TTransaction> {
   const { persistenceStore } = options;
+  const kubernetesSandbox = configuration.STANDALONE ? undefined : readKubernetesSandboxConfig();
+  if (kubernetesSandbox) {
+    const store = new KubernetesSandboxProviderStore<TTransaction>(kubernetesSandbox);
+    return () => store;
+  }
   if (isTrueFoundryModeEnabled(configuration)) {
     return () => new TrueFoundrySandboxProviderStore<TTransaction>();
   }

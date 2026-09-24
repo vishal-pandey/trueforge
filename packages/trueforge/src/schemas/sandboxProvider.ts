@@ -67,9 +67,25 @@ export const TrueFoundrySandboxProviderSchema = z
  * Store / runtime jsonb: Daytona settings rows plus env-synthesized truefoundry.
  * Not an OpenAPI component.
  */
+/** Server-managed Kubernetes (agent-sandbox) config — env-synthesized store records only. Not in OpenAPI. */
+export const KubernetesSandboxProviderSchema = z
+  .object({
+    type: z.literal('kubernetes').describe('Kubernetes (agent-sandbox) sandbox provider.'),
+    namespace: z.string().min(1).describe('Namespace sandboxes run in.'),
+    image: z.string().min(1).describe('Sandbox container image.'),
+    exec_timeout_ms: z.number().int().positive().describe('Default sandbox command exec timeout in milliseconds.'),
+    idle_ttl_minutes: z.number().int().positive().describe('Idle minutes before a sandbox is deleted.'),
+    runtime_class_name: z
+      .string()
+      .nullable()
+      .describe('Pod runtimeClassName (e.g. gvisor); null for the default runtime.'),
+  })
+  .strict();
+
 export const StoredSandboxProviderManifestSchema = z.discriminatedUnion('type', [
   DaytonaSandboxProviderSchema,
   TrueFoundrySandboxProviderSchema,
+  KubernetesSandboxProviderSchema,
 ]);
 
 /** Named enum so the generated SDK exposes a reusable `SandboxBuildStatus` type. */
@@ -123,6 +139,7 @@ export type DaytonaSandboxProvider = z.infer<typeof DaytonaSandboxProviderSchema
 /** Store/runtime jsonb — may be Daytona or env-synthesized truefoundry. */
 export type StoredSandboxProviderManifest = z.infer<typeof StoredSandboxProviderManifestSchema>;
 export type TrueFoundrySandboxProvider = z.infer<typeof TrueFoundrySandboxProviderSchema>;
+export type KubernetesSandboxProviderManifest = z.infer<typeof KubernetesSandboxProviderSchema>;
 export type SandboxBuildStatus = z.infer<typeof SandboxBuildStatusSchema>;
 export type SandboxBuildMetadata = z.infer<typeof SandboxBuildMetadataSchema>;
 export type SandboxStatus = z.infer<typeof SandboxStatusSchema>;
