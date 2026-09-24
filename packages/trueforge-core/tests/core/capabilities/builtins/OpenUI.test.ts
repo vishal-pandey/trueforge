@@ -51,4 +51,15 @@ describe('openUI', () => {
     expect(text).toContain(`<${OPENUI_MARKDOWN_FENCING_TAG}>`);
     expect(text).toBe(renderOpenUIPrompt());
   });
+
+  it('documents form and button signatures plus the decision-form rule', () => {
+    const prompt = renderOpenUIPrompt();
+    expect(prompt).toContain('Form(name: string, buttons: Buttons, fields?: FormControl[])');
+    expect(prompt).toContain('RadioGroup(name: string, items: RadioItem[]');
+    expect(prompt).toContain('Button(label: string, action?: ActionExpression');
+    expect(prompt).toContain('Buttons(buttons: Button[]');
+    expect(prompt).toContain(
+      'When the user must decide, render a Form whose primary Button uses @ToAssistant; the submitted values arrive as the next user message as JSON.',
+    );
+  });
 });

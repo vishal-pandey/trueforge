@@ -10,6 +10,8 @@ import {
 import { useTrueFoundryDownloadSandboxFile } from '@truefoundry/assistant-ui-runtime';
 import { useCallback, useMemo, useRef } from 'react';
 
+import { useOpenUiActionHandler } from '../hooks/useOpenUiActionHandler.js';
+import { useActiveSessionCanManage } from '../hooks/useResourcePermissions.js';
 import { MARKDOWN_SMOOTH_BACKLOG_CHARS, useThrottledMarkdownText } from '../hooks/useThrottledMarkdownText.js';
 import { useSlot } from '../theme/SlotsProvider.js';
 import { useToasterOptional } from './ToasterContainer.js';
@@ -73,6 +75,14 @@ export function AssistantTextContainer() {
     ? !networkComplete || text !== partState.text
     : smoothedPart.status?.type === 'running';
 
+  // Historical, still-streaming, or read-only blocks render forms that submit nothing.
+  const isLastMessage = useAuiState(s => s.message.isLast);
+  const isThreadRunning = useAuiState(s => s.thread.isRunning);
+  const canManageSession = useActiveSessionCanManage();
+  const handleOpenUiAction = useOpenUiActionHandler(
+    isLastMessage && canManageSession && !isStreaming && !isThreadRunning,
+  );
+
   const handleDownloadArtifact = useCallback(async (path: string) => {
     const { downloadSandboxFile, toaster } = downloadRef.current;
     try {
@@ -88,7 +98,14 @@ export function AssistantTextContainer() {
 
   // Skip markdown re-parse when a raw SSE tick did not advance the committed display text.
   return useMemo(
-    () => <Markdown content={text} isStreaming={isStreaming} onDownloadArtifact={handleDownloadArtifact} />,
-    [Markdown, text, isStreaming, handleDownloadArtifact],
+    () => (
+      <Markdown
+        content={text}
+        isStreaming={isStreaming}
+        onDownloadArtifact={handleDownloadArtifact}
+        onOpenUiAction={handleOpenUiAction}
+      />
+    ),
+    [Markdown, text, isStreaming, handleDownloadArtifact, handleOpenUiAction],
   );
 }

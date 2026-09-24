@@ -129,7 +129,32 @@ export function buildOpenUIInstruction(builder: InstructionBuilder): void {
       Data Display:
       TagBlock(tags: string[]) — tags is an array of strings
       Tag(text: string, icon?: string, size?: "sm" | "md" | "lg", variant?: "neutral" | "info" | "success" | "warning" | "danger") — Styled tag/badge with optional icon and variant
-      - Color-mapped Tag: Tag(value, null, "sm", value == "high" ? "danger" : value == "medium" ? "warning" : "neutral")`,
+      - Color-mapped Tag: Tag(value, null, "sm", value == "high" ? "danger" : value == "medium" ? "warning" : "neutral")
+
+      Forms:
+      Form(name: string, buttons: Buttons, fields?: FormControl[]) — Form container with fields and explicit action buttons
+      FormControl(label: string, input: Input | TextArea | Select | DatePicker | Slider | CheckBoxGroup | RadioGroup, hint?: string) — Field with label, input component, and optional hint text
+      Input(name: string, placeholder?: string, type?: "text" | "email" | "password" | "number" | "url", rules?: Rules, value?: $binding<string>)
+      TextArea(name: string, placeholder?: string, rows?: number, rules?: Rules, value?: $binding<string>)
+      Select(name: string, items: SelectItem[], placeholder?: string, rules?: Rules, value?: $binding<string>, size?: "small" | "medium" | "large")
+      SelectItem(value: string, label: string) — Option for Select
+      RadioGroup(name: string, items: RadioItem[], defaultValue?: string, rules?: Rules, value?: $binding<string>)
+      RadioItem(label: string, description: string, value: string)
+      CheckBoxGroup(name: string, items: CheckBoxItem[], rules?: Rules, value?: $binding<Record<string, boolean>>)
+      CheckBoxItem(label: string, description: string, name: string, defaultChecked?: boolean)
+      SwitchGroup(name: string, items: SwitchItem[], variant?: "clear" | "card" | "sunk", value?: $binding<Record<string, boolean>>) — Group of switch toggles
+      SwitchItem(label?: string, description?: string, name: string, defaultChecked?: boolean) — Individual switch toggle
+      DatePicker(name: string, mode?: "single" | "range", rules?: Rules, value?: $binding<any>)
+      Slider(name: string, variant: "continuous" | "discrete", min: number, max: number, step?: number, defaultValue?: number[], label?: string, rules?: Rules, value?: $binding<number[]>)
+      - Rules is an optional object: {required?: boolean, email?: boolean, url?: boolean, numeric?: boolean, min?: number, max?: number, minLength?: number, maxLength?: number, pattern?: string}. The renderer shows validation errors itself.
+      - Field names are the keys of the submitted values; use short snake_case names (e.g. "decision", "approved_amount").
+
+      Buttons:
+      Button(label: string, action?: ActionExpression, variant?: "primary" | "secondary" | "tertiary", type?: "normal" | "destructive", size?: "extra-small" | "small" | "medium" | "large") — Clickable button
+      Buttons(buttons: Button[], direction?: "row" | "column") — Group of Button components
+      - Action([@steps...]) runs steps in order: @ToAssistant("message") sends a message (plus the form's values) to the assistant; @OpenUrl("https://...") opens a link.
+      - A Button without an Action sends its label to the assistant.
+      - Decision form: Form("decision", Buttons([Button("Submit decision", Action([@ToAssistant("Decision submitted")]), "primary")]), [decisionField, notesField])`,
   );
 
   openui.addSection(
@@ -234,7 +259,8 @@ export function buildOpenUIInstruction(builder: InstructionBuilder): void {
         1. **Qualitative insights** — patterns, anomalies, or recommendations that aren't obvious from the visual (e.g. "the high input-to-output ratio suggests document processing")
         2. **Actionable next steps** — what the user can do next
         3. **Caveats/context** — things the data doesn't show
-      - If all the information is already visible in the openui components, a brief one-line summary is sufficient — do not enumerate the same values again.`,
+      - If all the information is already visible in the openui components, a brief one-line summary is sufficient — do not enumerate the same values again.
+      - When the user must decide, render a Form whose primary Button uses @ToAssistant; the submitted values arrive as the next user message as JSON.`,
   );
 
   openui.addSection(

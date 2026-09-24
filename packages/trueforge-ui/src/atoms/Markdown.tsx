@@ -35,6 +35,8 @@ export type MarkdownProps = {
   readOnly?: boolean;
   /** Shown on hover over sandbox artifact filenames when `readOnly` is true. */
   sandboxDownloadReadOnlyTooltip?: string;
+  /** Handles OpenUI button/form actions; keep it referentially stable so forms keep their state. */
+  onOpenUiAction?: OpenUiFenceBlockProps['onAction'];
   className?: string;
 };
 
@@ -64,6 +66,7 @@ function makeComponents(opts: {
   onDownloadArtifact?: (path: string, filename: string) => Promise<void>;
   readOnly?: boolean;
   sandboxDownloadReadOnlyTooltip?: string;
+  onOpenUiAction?: OpenUiFenceBlockProps['onAction'];
   OpenUiFenceBlock: ComponentType<OpenUiFenceBlockProps>;
   SandboxArtifactDownload: ComponentType<SandboxArtifactDownloadProps>;
   SyntaxHighlighter: ComponentType<SyntaxHighlighterProps>;
@@ -77,6 +80,7 @@ function makeComponents(opts: {
     onDownloadArtifact,
     readOnly,
     sandboxDownloadReadOnlyTooltip,
+    onOpenUiAction,
     OpenUiFenceBlock,
     SandboxArtifactDownload,
     SyntaxHighlighter,
@@ -112,7 +116,9 @@ function makeComponents(opts: {
       }
 
       if (language === 'openui') {
-        return <OpenUiFenceBlock content={code} isStreaming={isStreaming} darkTheme={darkTheme} />;
+        return (
+          <OpenUiFenceBlock content={code} isStreaming={isStreaming} darkTheme={darkTheme} onAction={onOpenUiAction} />
+        );
       }
 
       if (language === 'sandbox_artifacts') {
@@ -162,6 +168,7 @@ export function Markdown({
   onDownloadArtifact,
   readOnly,
   sandboxDownloadReadOnlyTooltip,
+  onOpenUiAction,
   className,
 }: MarkdownProps) {
   const mode = useThemeMode();
@@ -185,6 +192,7 @@ export function Markdown({
         onDownloadArtifact,
         readOnly,
         sandboxDownloadReadOnlyTooltip,
+        onOpenUiAction,
         OpenUiFenceBlock,
         SandboxArtifactDownload,
         SyntaxHighlighter,
@@ -197,6 +205,7 @@ export function Markdown({
       onDownloadArtifact,
       readOnly,
       sandboxDownloadReadOnlyTooltip,
+      onOpenUiAction,
       OpenUiFenceBlock,
       SandboxArtifactDownload,
       SyntaxHighlighter,

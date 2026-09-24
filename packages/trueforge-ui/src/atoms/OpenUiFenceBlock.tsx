@@ -1,6 +1,6 @@
 'use client';
 
-import { Renderer } from '@openuidev/react-lang';
+import { Renderer, type ActionEvent } from '@openuidev/react-lang';
 import { ThemeProvider, openuiLibrary } from '@openuidev/react-ui';
 
 import { useOptionalContentClassNames } from '../theme/ThemeProvider.js';
@@ -10,9 +10,11 @@ export type OpenUiFenceBlockProps = {
   content: string;
   isStreaming?: boolean;
   darkTheme?: boolean;
+  /** Receives button/form actions; omit to render the block inert. */
+  onAction?: (event: ActionEvent) => void;
 };
 
-export function OpenUiFenceBlock({ content, isStreaming, darkTheme }: OpenUiFenceBlockProps) {
+export function OpenUiFenceBlock({ content, isStreaming, darkTheme, onAction }: OpenUiFenceBlockProps) {
   const classNames = useOptionalContentClassNames();
 
   return (
@@ -21,7 +23,7 @@ export function OpenUiFenceBlock({ content, isStreaming, darkTheme }: OpenUiFenc
         <div
           className={cn('markdown-openui-scope min-w-0 w-full max-w-full overflow-x-auto', classNames.openui?.scope)}
         >
-          <Renderer response={content} library={openuiLibrary} isStreaming={isStreaming} />
+          <Renderer response={content} library={openuiLibrary} isStreaming={isStreaming} onAction={onAction} />
         </div>
       </ThemeProvider>
     </div>
