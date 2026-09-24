@@ -252,6 +252,7 @@ const SandboxSettings = () => {
                 <div className="overflow-hidden rounded-xl border border-border bg-card-bg">
                   {providers.map(entry => {
                     const provider = entry.data;
+                    const isManaged = 'managed' in provider && provider.managed === true;
                     const status = statusPresentation(entry.snapshotSyncStatus.status);
                     const statusReason = entry.snapshotSyncStatus.statusReason;
                     const statusIndicator = (
@@ -285,6 +286,7 @@ const SandboxSettings = () => {
 
                         <div className="flex flex-wrap items-center gap-2.5 sm:justify-end">
                           {statusIndicator}
+                          {isManaged ? <span className="text-xs text-text-secondary">Managed by server</span> : null}
                           {statusReason ? (
                             <Tooltip content={statusReason}>
                               <button
@@ -296,7 +298,7 @@ const SandboxSettings = () => {
                               </button>
                             </Tooltip>
                           ) : null}
-                          {entry.snapshotSyncStatus.status === 'failed' ? (
+                          {!isManaged && entry.snapshotSyncStatus.status === 'failed' ? (
                             <Button.Ghost
                               size="small"
                               type="button"
@@ -308,20 +310,22 @@ const SandboxSettings = () => {
                               Retry
                             </Button.Ghost>
                           ) : null}
-                          <Button.Secondary
-                            size="small"
-                            type="button"
-                            disabled={busy}
-                            onClick={() => {
-                              setFormError(null);
-                              setCreateEntry(null);
-                              setUpdateProvider(provider);
-                            }}
-                          >
-                            Update
-                          </Button.Secondary>
+                          {!isManaged ? (
+                            <Button.Secondary
+                              size="small"
+                              type="button"
+                              disabled={busy}
+                              onClick={() => {
+                                setFormError(null);
+                                setCreateEntry(null);
+                                setUpdateProvider(provider);
+                              }}
+                            >
+                              Update
+                            </Button.Secondary>
+                          ) : null}
 
-                          {sandboxCatalog.deleteSandboxProvider ? (
+                          {!isManaged && sandboxCatalog.deleteSandboxProvider ? (
                             <Button.Ghost
                               size="small"
                               className="text-text-secondary"

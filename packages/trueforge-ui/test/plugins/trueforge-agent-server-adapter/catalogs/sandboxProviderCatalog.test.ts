@@ -4,6 +4,7 @@ import { describe, it } from 'vitest';
 
 import {
   configFromHarness,
+  createSandboxProviderCatalog,
   filterUiSandboxProviders,
   toHarnessManifest,
   toUiCatalogEntry,
@@ -123,5 +124,59 @@ describe('sandboxProviderCatalog mappers', () => {
         }),
       /Unsupported sandbox provider type/i,
     );
+  });
+});
+
+describe('managed kubernetes provider', () => {
+  const managedBody = {
+    data: { type: 'kubernetes', name: 'Kubernetes (homelab)', namespace: 'trueforge-sandboxes', status: 'ready' },
+  };
+
+  function http(status: number, body: unknown) {
+    const calls: string[] = [];
+    return {
+      calls,
+      baseUrl: 'https://tf.example/',
+      fetch: (async (url: string) => {
+        calls.push(url);
+        return new Response(JSON.stringify(body), { status });
+      }) as unknown as typeof fetch,
+    };
+  }
+
+  it('lists the managed provider as connected and read-only, and hides the catalog', async () => {
+    let sdkCalls = 0;
+    const client = {
+      settings: { sandboxProviders: { get: async () => (sdkCalls++, {}) } },
+      catalogs: { sandboxProviders: { list: async () => (sdkCalls++, { data: [] }) } },
+    } as never;
+    const h = http(200, managedBody);
+    const catalog = createSandboxProviderCatalog(client, h);
+    const listed = await catalog.listSandboxProviders();
+    assert.equal(listed.length, 1);
+    assert.deepEqual(listed[0]?.snapshotSyncStatus, { status: 'ready' });
+    assert.equal(listed[0]?.data.name, 'Kubernetes (homelab)');
+    assert.equal((listed[0]?.data as { managed?: boolean }).managed, true);
+    assert.deepEqual(await catalog.getSandboxProviderCatalog(), []);
+    assert.equal(sdkCalls, 0);
+    assert.equal(h.calls[0], 'https://tf.example/api/v1/settings/sandbox-providers/managed');
+  });
+
+  it('falls back to the Daytona flow when /managed is 404', async () => {
+    let getCalls = 0;
+    const client = {
+      settings: {
+        sandboxProviders: {
+          get: async () => {
+            getCalls++;
+            throw new TrueForgeApi.NotFoundError({});
+          },
+        },
+      },
+      catalogs: { sandboxProviders: { list: async () => ({ data: [] }) } },
+    } as never;
+    const catalog = createSandboxProviderCatalog(client, http(404, { error: { message: 'x' } }));
+    assert.deepEqual(await catalog.listSandboxProviders(), []);
+    assert.equal(getCalls, 1);
   });
 });

@@ -11,7 +11,7 @@ import { createModelProviderCatalog } from './catalogs/modelProviderCatalog.js';
 import { createSandboxProviderCatalog } from './catalogs/sandboxProviderCatalog.js';
 import { createSkillCatalog } from './catalogs/skillCatalog.js';
 import { createHarnessChatServer } from './chatServer.js';
-import { createTrueForgeClient, type CreateTrueForgeClientOptions } from './client.js';
+import { createTrueForgeClient, resolveTrueForgeBaseUrl, type CreateTrueForgeClientOptions } from './client.js';
 import { createHarnessPermissionsServer } from './permissionsServer.js';
 import { createScheduleServer } from './schedules/scheduleServer.js';
 import type { HarnessAgentSpec } from './types.js';
@@ -81,7 +81,11 @@ export function createTrueForgeAgentUIServer(options: CreateTrueForgeAgentUIServ
       modelCatalog: createModelProviderCatalog(client),
       connectorCatalog: createConnectorCatalog(client),
       skillCatalog: createSkillCatalog(client),
-      sandboxCatalog: createSandboxProviderCatalog(client),
+      sandboxCatalog: createSandboxProviderCatalog(client, {
+        baseUrl: resolveTrueForgeBaseUrl(clientOptions.baseUrl ?? '/'),
+        fetch: clientOptions.fetch ?? globalThis.fetch.bind(globalThis),
+        token: clientOptions.token,
+      }),
     } satisfies CatalogServer);
 
   return createTrueFoundryServer<HarnessAgentSpec>({

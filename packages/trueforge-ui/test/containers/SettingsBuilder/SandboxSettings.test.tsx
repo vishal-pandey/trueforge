@@ -124,6 +124,34 @@ function createFakeHost(initial: SandboxProviderListEntry[] = []) {
 }
 
 describe('SandboxSettings', () => {
+  it('renders a server-managed provider read-only', async () => {
+    const managed = {
+      id: 'kubernetes',
+      name: 'Kubernetes (homelab)',
+      catalogId: 'kubernetes',
+      isConnected: true,
+      managed: true,
+      execTimeoutMs: 0,
+      autoStopIntervalInMinutes: 0,
+      autoArchiveIntervalInMinutes: 0,
+      autoDeleteIntervalInMinutes: 0,
+    } as SandboxProviderBase;
+    const host = createFakeHost([sandboxEntry({ provider: managed })]);
+    const { wrapper: Wrapper } = host;
+    render(
+      <Wrapper>
+        <SandboxSettings />
+      </Wrapper>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText('Kubernetes (homelab)')).toBeTruthy();
+    });
+    expect(screen.getByText('Connected')).toBeTruthy();
+    expect(screen.getByText('Managed by server')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Update' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Configure' })).toBeNull();
+  });
+
   it('autofills create form from catalog except apiKey', async () => {
     const host = createFakeHost();
     const { wrapper: Wrapper } = host;

@@ -16,7 +16,8 @@ import type {
   SandboxProviderListEntry,
 } from '../../../server/types.js';
 
-export type UiSandboxProvider = SandboxProviderBase;
+/** `managed`: server-configured provider (e.g. Kubernetes) — shown read-only. */
+export type UiSandboxProvider = SandboxProviderBase & { managed?: boolean };
 export type UiSandboxProviderCatalogEntry = SandboxProviderCatalogEntry;
 export type UiSandboxProviderListEntry = SandboxProviderListEntry;
 
@@ -109,8 +110,51 @@ export function toHarnessManifest(
   };
 }
 
+/** Plain HTTP access for endpoints not in the generated SDK. */
+export interface ManagedProviderHttp {
+  baseUrl: string;
+  fetch: typeof fetch;
+  token?: string | undefined;
+}
+
+interface ManagedProviderResponse {
+  data: { type: string; name: string; namespace: string; status: 'pending' | 'ready' | 'failed' };
+}
+
+/** Server-managed provider (e.g. Kubernetes) as a read-only list entry; undefined when settings are tenant-managed. */
+export async function fetchManagedSandboxProvider(
+  http: ManagedProviderHttp,
+): Promise<UiSandboxProviderListEntry | undefined> {
+  const base = http.baseUrl.endsWith('/') ? http.baseUrl : `${http.baseUrl}/`;
+  const url = new URL('api/v1/settings/sandbox-providers/managed', base).toString();
+  const response = await http.fetch(url, {
+    credentials: 'include',
+    headers: http.token ? { Authorization: `Bearer ${http.token}` } : {},
+  });
+  if (response.status === 404) {
+    return undefined;
+  }
+  if (!response.ok) {
+    throw new Error(`Failed to load managed sandbox provider (${String(response.status)})`);
+  }
+  const body = (await response.json()) as ManagedProviderResponse;
+  const provider: UiSandboxProvider = {
+    id: body.data.type,
+    name: body.data.name,
+    catalogId: body.data.type,
+    isConnected: true,
+    managed: true,
+    // No Daytona lifecycle knobs for a server-managed provider.
+    execTimeoutMs: 0,
+    autoStopIntervalInMinutes: 0,
+    autoArchiveIntervalInMinutes: 0,
+    autoDeleteIntervalInMinutes: 0,
+  };
+  return { data: provider, snapshotSyncStatus: { status: body.data.status } };
+}
+
 /** Settings sandbox-catalog port for `createTrueFoundryServer`. Delete omitted (no BE route). */
-export function createSandboxProviderCatalog(client: TrueForge): SandboxCatalogServer {
+export function createSandboxProviderCatalog(client: TrueForge, http?: ManagedProviderHttp): SandboxCatalogServer {
   async function resolveApiKey(apiKey: string | undefined): Promise<string> {
     const trimmed = apiKey?.trim();
     if (trimmed !== undefined && trimmed !== '') {
@@ -122,10 +166,17 @@ export function createSandboxProviderCatalog(client: TrueForge): SandboxCatalogS
 
   return {
     getSandboxProviderCatalog: async () => {
+      if (http && (await fetchManagedSandboxProvider(http))) {
+        return [];
+      }
       const body = await client.catalogs.sandboxProviders.list();
       return body.data.map(toUiCatalogEntry);
     },
     listSandboxProviders: async req => {
+      const managed = http ? await fetchManagedSandboxProvider(http) : undefined;
+      if (managed) {
+        return filterUiSandboxProviders({ providers: [managed], query: req?.query });
+      }
       let providers: UiSandboxProviderListEntry[];
       try {
         const body = await client.settings.sandboxProviders.get();
