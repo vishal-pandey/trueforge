@@ -12,16 +12,19 @@ ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable && pnpm config set store-dir /pnpm/store
 WORKDIR /app
 
-FROM base AS workspace
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc tsconfig.base.json ./
+FROM base AS store
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm fetch
+
+# Same build stages as the repo's Dockerfile.dev (keep in sync on upstream rebase).
+FROM store AS workspace
+COPY package.json .npmrc tsconfig.base.json ./
 COPY scripts scripts
 COPY packages/trueforge-core/package.json packages/trueforge-core/package.json
 COPY packages/trueforge/package.json packages/trueforge/package.json
 COPY packages/trueforge-sdk/package.json packages/trueforge-sdk/package.json
 COPY packages/frontend/package.json packages/frontend/package.json
 COPY packages/trueforge-ui/package.json packages/trueforge-ui/package.json
-COPY packages/assistant-ui-runtime/package.json packages/assistant-ui-runtime/package.json
 COPY packages/trueforge-core/scripts packages/trueforge-core/scripts
 COPY packages/trueforge-core/src/core/sandbox/scripts packages/trueforge-core/src/core/sandbox/scripts
 
@@ -36,7 +39,6 @@ RUN pnpm --filter @truefoundry/trueforge-core build && pnpm --filter @truefoundr
 FROM workspace AS frontend-builder
 RUN pnpm install --frozen-lockfile --offline --filter frontend...
 COPY packages/trueforge-sdk packages/trueforge-sdk
-COPY packages/assistant-ui-runtime packages/assistant-ui-runtime
 COPY packages/trueforge-ui packages/trueforge-ui
 RUN pnpm --filter @truefoundry/trueforge-ui build
 COPY packages/frontend packages/frontend
