@@ -4,8 +4,11 @@ FROM python:3.13-slim-bookworm
 ENV DEBIAN_FRONTEND=noninteractive
 ARG NATS_SERVER_VERSION="v2.14.2"
 ARG HELM_VERSION="v4.2.3"
+# Bump to force fresh layer digests (e.g. when nodes have a stuck pull of the old ones).
+ARG SANDBOX_LAYER_REV="2"
 
-RUN apt-get update \
+RUN echo "sandbox layer rev ${SANDBOX_LAYER_REV}" \
+  && apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl git jq ripgrep supervisor tree unzip zip procps \
   && curl -fsSL https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz | tar -xz -C /tmp \
   && mv /tmp/linux-amd64/helm /usr/local/bin/helm && rm -rf /tmp/linux-amd64 \

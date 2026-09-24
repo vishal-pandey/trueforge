@@ -1,3 +1,6 @@
+/**
+ * @jest-environment ./tests/core/sandbox/provider/kubernetes/nodeRealmEnvironment.cjs
+ */
 import { randomBytes } from 'node:crypto';
 import { createLogger } from 'winston';
 import { ClientNodeSandboxCluster } from '../../../../../src/core/sandbox/provider/kubernetes/ClientNodeSandboxCluster';
