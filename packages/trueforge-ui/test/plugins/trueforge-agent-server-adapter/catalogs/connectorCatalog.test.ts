@@ -81,7 +81,34 @@ describe('connectorCatalog mappers', () => {
         auth: { type: 'none' },
         requiresAuth: false,
         authenticated: true,
+        forwardCallerIdentity: false,
       },
+    );
+  });
+
+  it('round-trips the caller identity forwarding opt-in through the manifest', () => {
+    const manifest = toHarnessManifest({
+      name: 'los',
+      url: 'https://los.example.com/mcp',
+      auth: { type: 'none' },
+      description: 'Lending tools.',
+      forwardCallerIdentity: true,
+    });
+    assert.deepEqual(manifest, {
+      type: 'remote',
+      name: 'los',
+      url: 'https://los.example.com/mcp',
+      description: 'Lending tools.',
+      forward_caller_identity: true,
+    });
+    assert.equal(
+      toUiConnector({ name: 'los', manifest, authStatus: { status: 'not_required' } }).forwardCallerIdentity,
+      true,
+    );
+    assert.equal(
+      'forward_caller_identity' in
+        toHarnessManifest({ name: 'plain', url: 'https://plain.example.com/mcp', auth: { type: 'none' } }),
+      false,
     );
   });
 

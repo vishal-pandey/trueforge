@@ -65,6 +65,7 @@ describe('ConnectorSettings edit flow', () => {
         description: connector.description,
         url: connector.url,
         auth: { type: 'none' },
+        forwardCallerIdentity: false,
       });
     });
   });

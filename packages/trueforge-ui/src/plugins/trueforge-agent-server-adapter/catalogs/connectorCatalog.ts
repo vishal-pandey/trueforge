@@ -16,10 +16,28 @@ import type {
   UpdateConnectorRequest,
 } from '../../../server/types.js';
 
+/** Remote-server opt-in to receive the signed-in caller's identity on tool calls. */
+type ForwardCallerIdentity = { forwardCallerIdentity?: boolean };
+
 export type UiConnectorAuth = ConnectorAuth;
 export type UiConnectorAuthPublic = ConnectorAuthPublic;
-export type UiConnector = ConnectorBase;
+export type UiConnector = ConnectorBase & ForwardCallerIdentity;
 export type UiConnectorCatalogEntry = ConnectorCatalogEntry;
+type UiCreateConnectorRequest = CreateConnectorRequest & ForwardCallerIdentity;
+type UiUpdateConnectorRequest = UpdateConnectorRequest & ForwardCallerIdentity;
+
+const FORWARD_CALLER_IDENTITY_KEY = 'forward_caller_identity';
+
+/**
+ * The generated SDK predates `forward_caller_identity`, so it travels as a passthrough manifest key
+ * (raw snake_case); the camelCase read covers a regenerated SDK.
+ */
+function readForwardCallerIdentity(manifest: TrueForgeApi.McpServerManifest): boolean {
+  return (
+    Reflect.get(manifest, FORWARD_CALLER_IDENTITY_KEY) === true ||
+    Reflect.get(manifest, 'forwardCallerIdentity') === true
+  );
+}
 
 const DEFAULT_API_KEY_HEADER = 'Authorization';
 
@@ -109,6 +127,7 @@ export function toUiConnector(server: TrueForgeApi.ConfiguredMcpServer): UiConne
     description: server.manifest.description,
     url: server.manifest.url,
     auth,
+    forwardCallerIdentity: readForwardCallerIdentity(server.manifest),
     requiresAuth: server.authStatus.status === 'auth_required',
     authenticated: server.authStatus.status !== 'auth_required',
   };
@@ -132,15 +151,18 @@ export function toHarnessManifest(req: {
   url: string;
   auth: ConnectorAuth;
   description?: string;
+  forwardCallerIdentity?: boolean;
 }): TrueForgeApi.McpServerManifest {
   const auth = toHarnessAuth(req.auth);
   const trimmed = req.description?.trim();
+  const forwarding = req.forwardCallerIdentity === true ? { [FORWARD_CALLER_IDENTITY_KEY]: true } : {};
   return {
     type: 'remote',
     name: req.name,
     url: req.url,
     description: trimmed !== undefined && trimmed !== '' ? trimmed : `${req.name} MCP server`,
     ...(auth === undefined ? {} : { auth }),
+    ...forwarding,
   };
 }
 
@@ -153,8 +175,8 @@ export function createConnectorCatalog(
   UiConnectorAuthPublic,
   UiConnector,
   UiConnectorCatalogEntry,
-  CreateConnectorRequest,
-  UpdateConnectorRequest
+  UiCreateConnectorRequest,
+  UiUpdateConnectorRequest
 > {
   async function getConfigured(name: string): Promise<TrueForgeApi.ConfiguredMcpServer> {
     const listed = await client.settings.mcpServers.list();
@@ -228,6 +250,7 @@ export function createConnectorCatalog(
           url: req.url,
           auth,
           description: req.description,
+          forwardCallerIdentity: req.forwardCallerIdentity,
         }),
       });
       return toUiConnector(body.data);
@@ -240,6 +263,7 @@ export function createConnectorCatalog(
           url: req.url,
           auth,
           description: req.description,
+          forwardCallerIdentity: req.forwardCallerIdentity,
         }),
       });
       return toUiConnector(body.data);

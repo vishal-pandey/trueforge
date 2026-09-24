@@ -15,6 +15,7 @@ export type AddMcpServerDraft = {
   url: string;
   description: string;
   auth: ConnectorAuth;
+  forwardCallerIdentity: boolean;
 };
 
 type AddMcpServerFormProps = {
@@ -34,6 +35,11 @@ const AUTH_OPTIONS: Array<{ value: McpAuthType; label: string }> = [
 
 const inputClassName = auiInputClass('h-11 shadow-sm');
 
+/** Hosts may carry `forwardCallerIdentity` on connectors; the shared connector type does not declare it. */
+function connectorForwardsCallerIdentity(connector: ConnectorBase | undefined): boolean {
+  return connector !== undefined && 'forwardCallerIdentity' in connector && connector.forwardCallerIdentity === true;
+}
+
 const RequiredMark = () => (
   <span className="ml-0.5 text-failure-bg" aria-hidden>
     *
@@ -47,6 +53,7 @@ const AddMcpServerForm = ({ open, onOpenChange, onSubmit, connector, busy = fals
   const [authType, setAuthType] = useState<McpAuthType>('dcr');
   const [apiKey, setApiKey] = useState('');
   const [headerName, setHeaderName] = useState('');
+  const [forwardCallerIdentity, setForwardCallerIdentity] = useState(false);
   const isEditing = connector !== undefined;
   const nameInputClassName = auiInputClass(
     `h-11 shadow-sm ${isEditing ? 'cursor-not-allowed bg-secondary-bg/60 text-text-secondary opacity-40' : ''}`,
@@ -59,6 +66,7 @@ const AddMcpServerForm = ({ open, onOpenChange, onSubmit, connector, busy = fals
     setAuthType('dcr');
     setApiKey('');
     setHeaderName('');
+    setForwardCallerIdentity(false);
   };
 
   useEffect(() => {
@@ -69,6 +77,7 @@ const AddMcpServerForm = ({ open, onOpenChange, onSubmit, connector, busy = fals
     setAuthType(connector?.auth.type ?? 'dcr');
     setApiKey('');
     setHeaderName(connector?.auth.type === 'header' ? (connector.auth.headerName ?? '') : '');
+    setForwardCallerIdentity(connectorForwardsCallerIdentity(connector));
   }, [connector, open]);
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -98,6 +107,7 @@ const AddMcpServerForm = ({ open, onOpenChange, onSubmit, connector, busy = fals
         url: url.trim(),
         description: description.trim(),
         auth,
+        forwardCallerIdentity,
       });
       resetForm();
       onOpenChange(false);
@@ -271,6 +281,24 @@ const AddMcpServerForm = ({ open, onOpenChange, onSubmit, connector, busy = fals
               </div>
             </>
           ) : null}
+          <label className="flex cursor-pointer items-start gap-2.5 text-sm text-text-primary">
+            <input
+              id="mcp-server-forward-caller-identity"
+              type="checkbox"
+              checked={forwardCallerIdentity}
+              onChange={event => {
+                setForwardCallerIdentity(event.target.checked);
+              }}
+              aria-describedby="mcp-server-forward-caller-identity-hint"
+              className="mt-0.5 size-4 shrink-0"
+            />
+            <span>
+              Forward signed-in user identity to this server
+              <span id="mcp-server-forward-caller-identity-hint" className="mt-0.5 block text-xs text-text-secondary">
+                Sends the user's sign-in token and identity with every tool call. Only enable for servers you trust.
+              </span>
+            </span>
+          </label>
         </div>
 
         <div className="mt-6 space-y-3">

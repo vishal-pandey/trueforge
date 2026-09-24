@@ -38,6 +38,7 @@ describe('AddMcpServerForm', () => {
         url: 'https://mcp.example.com/mcp',
         description: 'Query analytics from Postgres',
         auth: { type: 'dcr' },
+        forwardCallerIdentity: false,
       });
     });
   });
@@ -100,7 +101,33 @@ describe('AddMcpServerForm', () => {
         url: 'https://new.example.com/mcp',
         description: 'Updated tools',
         auth: { type: 'header', apiKey: '', headerName: 'X-API-Key' },
+        forwardCallerIdentity: false,
       });
+    });
+  });
+
+  it('prefills and submits the caller identity forwarding opt-in', async () => {
+    const onSubmit = vi.fn(async () => undefined);
+    const connector = {
+      id: 'los',
+      name: 'los',
+      description: 'Lending tools',
+      url: 'https://los.example.com/mcp',
+      authenticated: true,
+      requiresAuth: false,
+      auth: { type: 'none' },
+      forwardCallerIdentity: true,
+    } satisfies ConnectorBase & { forwardCallerIdentity: boolean };
+
+    render(<AddMcpServerForm open connector={connector} onOpenChange={() => undefined} onSubmit={onSubmit} />);
+
+    const checkbox = screen.getByRole('checkbox', { name: /Forward signed-in user identity to this server/ });
+    expect(checkbox).toBeChecked();
+    fireEvent.click(checkbox);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ forwardCallerIdentity: false }));
     });
   });
 
