@@ -57,14 +57,15 @@ import {
   getModelDetails,
   parseGatewayMetadataHeader,
   resolveSandboxProvider,
-  withGatewayMetadataHeaders,
+  turnMcpHeaders,
   X_TFY_METADATA,
+  type CallerIdentity,
 } from '../runtime/sessionResources';
 import { checkSnapshotStatus } from '../sandbox/providerUtils';
 import { MAX_SESSION_TITLE_LENGTH } from '../schemas/session';
 import { newId } from '../utils/id';
 import { resolveWebSearchProvider } from '../websearch/providers';
-import { canReadAgentBoundResource } from './agentAccess';
+import { canReadSession } from './agentAccess';
 
 export function toWireTurn(record: TurnRecordWithoutSnapshot): Turn {
   return {
@@ -145,6 +146,8 @@ interface BeginTurnExecutionParams {
   input: TurnInputItem[] | undefined;
   previous_turn_id: string | undefined;
   userRef: string;
+  /** Forwarded only to MCP servers with `forward_caller_identity`. */
+  callerIdentity: CallerIdentity;
   resolveTurnHeaders: ResolveTurnHeaders;
   deps: BeginTurnExecutionDeps;
 }
@@ -163,7 +166,9 @@ function createTurnResolver(deps: {
   logger: Logger;
   signal: AbortSignal;
   userRef: string;
+  callerIdentity: CallerIdentity;
   session: SessionHandle;
+  turnId: string;
   turnHeaders: Record<string, string>;
 }): TurnResourceResolver {
   const {
@@ -176,7 +181,9 @@ function createTurnResolver(deps: {
     logger,
     signal,
     userRef,
+    callerIdentity,
     session,
+    turnId,
     turnHeaders,
   } = deps;
   const tenant_id = session.tenant_id;
@@ -216,10 +223,7 @@ function createTurnResolver(deps: {
       }
       return {
         url: connection.url,
-        headers: withGatewayMetadataHeaders({
-          headers: connection.headers,
-          metadataHeaders: turnHeaders,
-        }),
+        headers: turnMcpHeaders({ connection, turnHeaders, callerIdentity, sessionId, turnId }),
       };
     },
     mcpRequestTimeoutMs: configuration.MCP_REQUEST_TIMEOUT_MS,
@@ -400,7 +404,15 @@ export interface TurnEventDrainInput {
 export async function beginTurnExecution(
   params: BeginTurnExecutionParams,
 ): Promise<{ turn: TurnHandle; drainInput: TurnEventDrainInput }> {
-  const { session, input, previous_turn_id: previousTurnId, userRef, resolveTurnHeaders, deps } = params;
+  const {
+    session,
+    input,
+    previous_turn_id: previousTurnId,
+    userRef,
+    callerIdentity,
+    resolveTurnHeaders,
+    deps,
+  } = params;
   const sessionId = session.session_id;
   const turnId = newId();
 
@@ -416,7 +428,9 @@ export async function beginTurnExecution(
     logger: deps.logger,
     signal: abortController.signal,
     userRef,
+    callerIdentity,
     session,
+    turnId,
     turnHeaders: resolveTurnHeaders({ session, turnId }),
   });
 
@@ -568,12 +582,11 @@ export function createTurnsRouter(deps: TurnsRouterDeps) {
       return c.json({ error: { message: `Session not found: ${sessionId}` } }, 404);
     }
     if (
-      !(await canReadAgentBoundResource({
+      !(await canReadSession({
         store: deps.resolveAgentStore(c),
         context: requestContext,
         authorizer: deps.authorizer,
-        agent_id: session.record.agent.type === 'reference' ? session.record.agent.id : undefined,
-        created_by_subject_id: session.record.created_by_subject.subject_id,
+        record: session.record,
       }))
     ) {
       return c.json({ error: { message: FORBIDDEN_SESSION_ACCESS } }, 403);
@@ -603,12 +616,11 @@ export function createTurnsRouter(deps: TurnsRouterDeps) {
       return c.json({ error: { message: `Session not found: ${sessionId}` } }, 404);
     }
     if (
-      !(await canReadAgentBoundResource({
+      !(await canReadSession({
         store: deps.resolveAgentStore(c),
         context: requestContext,
         authorizer: deps.authorizer,
-        agent_id: session.record.agent.type === 'reference' ? session.record.agent.id : undefined,
-        created_by_subject_id: session.record.created_by_subject.subject_id,
+        record: session.record,
       }))
     ) {
       return c.json({ error: { message: FORBIDDEN_SESSION_ACCESS } }, 403);
@@ -703,12 +715,11 @@ export function createTurnsRouter(deps: TurnsRouterDeps) {
       return c.json({ error: { message: `Session not found: ${sessionId}` } }, 404);
     }
     if (
-      !(await canReadAgentBoundResource({
+      !(await canReadSession({
         store: deps.resolveAgentStore(c),
         context: requestContext,
         authorizer: deps.authorizer,
-        agent_id: session.record.agent.type === 'reference' ? session.record.agent.id : undefined,
-        created_by_subject_id: session.record.created_by_subject.subject_id,
+        record: session.record,
       }))
     ) {
       return c.json({ error: { message: FORBIDDEN_SESSION_ACCESS } }, 403);
@@ -782,6 +793,7 @@ export function createTurnsRouter(deps: TurnsRouterDeps) {
       input: body.input,
       previous_turn_id: body.previous_turn_id,
       userRef: requestContext.subject.id,
+      callerIdentity: { subject_id: requestContext.subject.id, user_credential: requestContext.user_credential },
       resolveTurnHeaders: input => gatewayTurnHeaders({ ...input, requestMetadata }),
       deps: {
         ...deps,
@@ -845,12 +857,11 @@ export function createTurnsRouter(deps: TurnsRouterDeps) {
       return c.json({ error: { message: `Session not found: ${sessionId}` } }, 404);
     }
     if (
-      !(await canReadAgentBoundResource({
+      !(await canReadSession({
         store: deps.resolveAgentStore(c),
         context: requestContext,
         authorizer: deps.authorizer,
-        agent_id: session.record.agent.type === 'reference' ? session.record.agent.id : undefined,
-        created_by_subject_id: session.record.created_by_subject.subject_id,
+        record: session.record,
       }))
     ) {
       return c.json({ error: { message: FORBIDDEN_SESSION_ACCESS } }, 403);

@@ -9,7 +9,7 @@ import type { CreatedBySubject } from '../schemas/subject';
 export interface SessionRecord<TCustom extends object = Record<string, never>> {
   tenant_id: string;
   session_id: string;
-  /** Caller identity that created the session (immutable after create). */
+  /** Session owner: the creating caller, or the assignee after `updateSession` reassigns it. */
   created_by_subject: CreatedBySubject;
   agent: SessionAgent;
   /**

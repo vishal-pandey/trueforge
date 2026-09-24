@@ -64,6 +64,12 @@ const RemoteMcpServerManifestSchema = z
     url: z.url().describe('MCP endpoint URL.'),
     description: McpServerDescriptionSchema,
     auth: McpServerManifestAuthSchema.optional(),
+    forward_caller_identity: z
+      .boolean()
+      .optional()
+      .describe(
+        "When true, agent turns send the signed-in caller's bearer token and identity to this server as X-TrueForge-User-Token, X-TrueForge-User, X-TrueForge-Session-Id, and X-TrueForge-Turn-Id headers.",
+      ),
   })
   .strict()
   .openapi('RemoteMCPServerManifest');

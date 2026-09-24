@@ -196,6 +196,35 @@ describe('getMcpConnection', () => {
     expect(connection.headers).toEqual({});
   });
 
+  it('exposes forward_caller_identity only when the remote manifest opts in', async () => {
+    await mcpServerStore.upsertServer({
+      tenant_id: 'default',
+      name: 'identity-mcp',
+      manifest: {
+        type: 'remote',
+        name: 'identity-mcp',
+        url: 'https://mcp.identity.example/mcp',
+        description: 'Identity-aware MCP server.',
+        forward_caller_identity: true,
+      },
+    });
+    const flagged = await getMcpConnection({
+      tenant_id: 'default',
+      name: 'identity-mcp',
+      store: mcpServerStore,
+      userRef: STANDALONE_REQUEST_CONTEXT.subject.id,
+    });
+    expect(flagged?.forward_caller_identity).toBe(true);
+
+    const unflagged = await getMcpConnection({
+      tenant_id: 'default',
+      name: 'open-mcp',
+      store: mcpServerStore,
+      userRef: STANDALONE_REQUEST_CONTEXT.subject.id,
+    });
+    expect(unflagged?.forward_caller_identity).toBe(false);
+  });
+
   it('returns configured static headers for header-auth servers', async () => {
     await mcpServerStore.upsertServer({
       tenant_id: 'default',

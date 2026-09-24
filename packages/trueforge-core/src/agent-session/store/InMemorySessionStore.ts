@@ -272,6 +272,9 @@ export class InMemorySessionStore<
     if (input.metadata !== undefined) {
       stored.record.metadata = deepCopy(input.metadata);
     }
+    if (input.created_by_subject !== undefined) {
+      stored.record.created_by_subject = deepCopy(input.created_by_subject);
+    }
     const now = Date.now();
     stored.record.updated_at = new Date(now);
     stored.record.last_activity_timestamp_ms = now;

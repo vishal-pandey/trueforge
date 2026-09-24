@@ -129,6 +129,7 @@ The default. Do **not** set any `OIDC_*` variables, run TrueForge as usual ([Qui
     | `OIDC_USER_DISPLAY_NAME_CLAIM` | No (default `name`) | Claim used as the user's display name |
     | `OIDC_USER_ROLE_CLAIM` | No (default `groups`) | Claim inspected for admin membership |
     | `OIDC_ADMIN_ROLE_VALUE` | No (default `admin`) | Exact string that grants `admin` (case-sensitive) |
+    | `OIDC_SESSION_ASSIGNER_ROLE_VALUE` | No (default `OIDC_ADMIN_ROLE_VALUE`) | Exact role value that may assign sessions to other users via `POST /api/v1/sessions/{session_id}/assign` (admins always may) |
     | `OIDC_SCOPES` | No (default `openid,profile,email`) | Scopes for the authorize request |
     | `OIDC_ALLOWED_EMAILS` | No | Comma-separated allowlist of exact emails and/or `*` globs (e.g. `alice@acme.com,*@partner.com`). When set, only ID tokens whose `email` claim matches an entry may sign in. Empty / unset = unrestricted. Matching is case-insensitive. |
 

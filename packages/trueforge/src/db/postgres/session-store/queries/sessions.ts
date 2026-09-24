@@ -198,6 +198,7 @@ export async function updateSession(db: Kysely<Database>, input: UpdateSessionIn
   const agent = input.agent;
   const title = input.title;
   const metadata = input.metadata;
+  const createdBySubject = input.created_by_subject;
 
   if (agent !== undefined) {
     const existing = await getSession(db, { tenant_id: input.tenant_id, session_id: input.session_id });
@@ -232,6 +233,12 @@ export async function updateSession(db: Kysely<Database>, input: UpdateSessionIn
         return qb;
       }
       return qb.set({ metadata: json(metadata) });
+    })
+    .$if(createdBySubject !== undefined, qb => {
+      if (createdBySubject === undefined) {
+        return qb;
+      }
+      return qb.set({ created_by_subject: json(createdBySubject) });
     })
     .where('tenant_id', '=', input.tenant_id)
     .where('session_id', '=', input.session_id)

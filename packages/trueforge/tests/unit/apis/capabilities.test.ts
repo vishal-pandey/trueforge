@@ -40,6 +40,7 @@ const OIDC_CONFIG: OIDCConfig = {
   OIDC_USER_DISPLAY_NAME_CLAIM: 'name',
   OIDC_USER_ROLE_CLAIM: 'groups',
   OIDC_ADMIN_ROLE_VALUE: 'admin',
+  OIDC_SESSION_ASSIGNER_ROLE_VALUE: 'admin',
   OIDC_SCOPES: ['openid', 'profile', 'email', 'groups'],
   OIDC_ALLOWED_EMAILS: [],
 };

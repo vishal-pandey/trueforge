@@ -3,9 +3,9 @@
  * and schedule handlers. Lives in the API layer because stores must stay free
  * of request identity.
  */
-import type { TokenPagination } from '@truefoundry/trueforge-core/agent-session';
+import type { SessionRecord, TokenPagination } from '@truefoundry/trueforge-core/agent-session';
 import type { AgentAction, Authorizer } from '../auth/authorizer';
-import type { RequestContext } from '../auth/identity';
+import { hasAdminRole, type RequestContext } from '../auth/identity';
 import type { AgentRecord, IAgentStore } from '../db/agentStore';
 
 /** The agent only when the caller may act on it, so callers answer 404 for missing and forbidden alike. */
@@ -95,4 +95,24 @@ export async function canReadAgentBoundResource<TTransaction>(input: {
   }
   const managedAgentIds = await resolveManagedAgentIds({ store, context, authorizer });
   return managedAgentIds.includes(agent_id);
+}
+
+/** Session reads: admins may read any session (writes stay owner-only); others follow agent-bound rules. */
+export async function canReadSession<TTransaction>(input: {
+  store: IAgentStore<TTransaction>;
+  context: RequestContext;
+  authorizer: Authorizer;
+  record: Pick<SessionRecord, 'agent' | 'created_by_subject'>;
+}): Promise<boolean> {
+  const { store, context, authorizer, record } = input;
+  if (hasAdminRole(context)) {
+    return true;
+  }
+  return canReadAgentBoundResource({
+    store,
+    context,
+    authorizer,
+    agent_id: record.agent.type === 'reference' ? record.agent.id : undefined,
+    created_by_subject_id: record.created_by_subject.subject_id,
+  });
 }

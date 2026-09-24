@@ -59,7 +59,7 @@ export interface SessionTable {
   tenant_id: string;
   /** key */
   session_id: string;
-  /** Caller identity that created the session (immutable after create). */
+  /** Session owner: the creator, or the assignee after an ownership transfer. */
   created_by_subject: JSONColumnType<CreatedBySubject, CreatedBySubject, CreatedBySubject>;
   /**
    * Null for interactive sessions.

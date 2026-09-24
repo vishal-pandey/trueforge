@@ -62,7 +62,7 @@ type JsonbColumn<T extends object | null> = JSONColumnType<T, T | string, T | st
 export interface SessionTable {
   tenant_id: string;
   session_id: string;
-  /** Caller identity that created the session (immutable after create). */
+  /** Session owner: the creator, or the assignee after an ownership transfer. */
   created_by_subject: JsonbColumn<CreatedBySubject>;
   /** Optional provenance (e.g. schedule). Null for interactive sessions. */
   source: JsonbColumn<SessionSource> | null;

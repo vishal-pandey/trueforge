@@ -17,6 +17,7 @@ function config(overrides: Partial<OIDCConfig> = {}): OIDCConfig {
     OIDC_USER_DISPLAY_NAME_CLAIM: 'name',
     OIDC_USER_ROLE_CLAIM: 'groups',
     OIDC_ADMIN_ROLE_VALUE: 'harness-admins',
+    OIDC_SESSION_ASSIGNER_ROLE_VALUE: 'harness-admins',
     OIDC_SCOPES: ['openid', 'profile', 'email', 'groups'],
     OIDC_ALLOWED_EMAILS: [],
     ...overrides,

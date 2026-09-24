@@ -28,6 +28,29 @@ import { resolveWebSearchProvider } from '../websearch/providers';
 export interface McpConnection {
   url: string;
   headers: RemoteMcpHeaders;
+  /** Server opted in to receiving the turn caller's identity headers. */
+  forward_caller_identity: boolean;
+}
+
+/** Identity of whoever started the turn; the credential is null when no live request backs it (schedules). */
+export interface CallerIdentity {
+  subject_id: string;
+  user_credential: string | null;
+}
+
+/** Caller identity headers; never merge these into LLM/turn headers — the credential only reaches opted-in servers. */
+function callerIdentityMcpHeaders(input: {
+  callerIdentity: CallerIdentity;
+  sessionId: string;
+  turnId: string;
+}): Record<string, string> {
+  const { callerIdentity, sessionId, turnId } = input;
+  return {
+    'X-TrueForge-User': callerIdentity.subject_id,
+    'X-TrueForge-Session-Id': sessionId,
+    'X-TrueForge-Turn-Id': turnId,
+    ...(callerIdentity.user_credential === null ? {} : { 'X-TrueForge-User-Token': callerIdentity.user_credential }),
+  };
 }
 
 /** Gateway header carrying stringified JSON metadata. */
@@ -131,6 +154,24 @@ export function withGatewayMetadataHeaders(input: {
   };
 }
 
+/** MCP invoke headers for one turn: connection auth, then gateway metadata, then caller identity when opted in. */
+export function turnMcpHeaders(input: {
+  connection: McpConnection;
+  turnHeaders: Record<string, string>;
+  callerIdentity: CallerIdentity;
+  sessionId: string;
+  turnId: string;
+}): RemoteMcpHeaders {
+  const { connection, turnHeaders, callerIdentity, sessionId, turnId } = input;
+  const identityHeaders = connection.forward_caller_identity
+    ? callerIdentityMcpHeaders({ callerIdentity, sessionId, turnId })
+    : {};
+  return withGatewayMetadataHeaders({
+    headers: connection.headers,
+    metadataHeaders: { ...turnHeaders, ...identityHeaders },
+  });
+}
+
 /** Split `provider/model` FQN. Returns undefined when the shape is not exactly one slash. */
 export function parseModelFqn(name: string): { providerName: string; modelName: string } | undefined {
   const slash = name.indexOf('/');
@@ -225,6 +266,7 @@ export async function getMcpConnection({
   return {
     url: record.manifest.url,
     headers: store.resolveInvokeHeaders({ record, userRef }),
+    forward_caller_identity: record.manifest.type === 'remote' && record.manifest.forward_caller_identity === true,
   };
 }
 

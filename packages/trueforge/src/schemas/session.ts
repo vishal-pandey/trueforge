@@ -72,6 +72,24 @@ export const UpdateSessionRequestSchema = z
   .strict()
   .openapi('UpdateSessionRequest');
 
+/** Reassigns session ownership to another subject. */
+export const AssignSessionRequestSchema = z
+  .object({
+    subject_id: z
+      .string()
+      .trim()
+      .min(1)
+      .describe("Assignee's user reference (the value of the configured user reference claim, e.g. email)."),
+    subject_display_name: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe('Assignee display name. Defaults to subject_id.'),
+  })
+  .strict()
+  .openapi('AssignSessionRequest');
+
 export type { Session } from '@truefoundry/trueforge-core/agent-session';
 
 /** Wire ISO-8601 (RFC 3339, offsets allowed) → Date for the store. */
@@ -115,6 +133,11 @@ export const ListSessionsRequestQuerySchema = z
       .stringbool()
       .optional()
       .describe('When true, only sessions created by the authenticated subject.')
+      .openapi({ type: 'boolean' }),
+    all_subjects: z
+      .stringbool()
+      .optional()
+      .describe("When true and the caller is an admin, include every subject's sessions. Ignored for non-admins.")
       .openapi({ type: 'boolean' }),
     metadata: SessionMetadataSchema.optional()
       .openapi({

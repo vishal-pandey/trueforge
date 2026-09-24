@@ -8,6 +8,7 @@ import { createRoute, z } from '@hono/zod-openapi';
 import { RequestErrorResponseSchema } from '../schemas/errors';
 import { ListSessionEventsRequestQuerySchema, ListSessionEventsResponseSchema } from '../schemas/events';
 import {
+  AssignSessionRequestSchema,
   CreateSessionRequestSchema,
   GetOrCreateSessionByExternalIdRequestSchema,
   GetSessionResponseSchema,
@@ -112,7 +113,7 @@ export const getSessionRoute = createRoute({
   path: '/{session_id}',
   tags: [OpenApiTag.AGENT_SESSIONS],
   summary: 'Get a session',
-  description: 'Fetch a session by ID. Only the session creator may fetch it.',
+  description: 'Fetch a session by ID. Only the session owner, managers of its agent, or admins may fetch it.',
   'x-fern-sdk-group-name': ['sessions'],
   'x-fern-sdk-method-name': 'get',
   request: {
@@ -288,6 +289,50 @@ export const listSessionEventsRoute = createRoute({
     404: {
       content: { 'application/json': { schema: RequestErrorResponseSchema } },
       description: 'Session not found.',
+    },
+  },
+});
+
+export const assignSessionRoute = createRoute({
+  method: 'post',
+  path: '/{session_id}/assign',
+  tags: [OpenApiTag.AGENT_SESSIONS],
+  summary: 'Assign a session to a user',
+  description:
+    'Transfer session ownership to another user, who can then continue it. Requires the admin or session-assigner role. Rejected while a turn is running.',
+  'x-fern-sdk-group-name': ['sessions'],
+  'x-fern-sdk-method-name': 'assign',
+  request: {
+    params: SessionIdParamsSchema,
+    body: {
+      content: { 'application/json': { schema: AssignSessionRequestSchema } },
+      required: true,
+    },
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: GetSessionResponseSchema } },
+      description: 'Session assigned.',
+    },
+    400: {
+      content: { 'application/json': { schema: RequestErrorResponseSchema } },
+      description: 'Invalid request body.',
+    },
+    403: {
+      content: { 'application/json': { schema: RequestErrorResponseSchema } },
+      description: 'Caller may not assign sessions.',
+    },
+    404: {
+      content: { 'application/json': { schema: RequestErrorResponseSchema } },
+      description: 'Session not found.',
+    },
+    409: {
+      content: { 'application/json': { schema: RequestErrorResponseSchema } },
+      description: 'The session has a running turn.',
+    },
+    422: {
+      content: { 'application/json': { schema: RequestErrorResponseSchema } },
+      description: 'Session metadata cannot hold the assignment stamps.',
     },
   },
 });

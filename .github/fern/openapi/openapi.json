@@ -356,6 +356,25 @@
         },
         "type": "object"
       },
+      "AssignSessionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "subject_display_name": {
+            "description": "Assignee display name. Defaults to subject_id.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "subject_id": {
+            "description": "Assignee's user reference (the value of the configured user reference claim, e.g. email).",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject_id"
+        ],
+        "type": "object"
+      },
       "AvailableMCPServer": {
         "additionalProperties": false,
         "properties": {
@@ -3384,6 +3403,10 @@
             "minLength": 1,
             "type": "string"
           },
+          "forward_caller_identity": {
+            "description": "When true, agent turns send the signed-in caller's bearer token and identity to this server as X-TrueForge-User-Token, X-TrueForge-User, X-TrueForge-Session-Id, and X-TrueForge-Turn-Id headers.",
+            "type": "boolean"
+          },
           "name": {
             "$ref": "#/components/schemas/ResourceName"
           },
@@ -5816,7 +5839,7 @@
   "info": {
     "description": "HTTP API for the TrueForge agent server (`/api/v1`). Interactive docs are served at `/api/v1/docs` (OpenAPI JSON at `/api/v1/openapi.json`).\n\n**Authentication:** Standalone auth accepts requests without credentials — middleware stamps a local default user. When OIDC or TrueFoundry auth is configured, protected routes require a valid cookie or `Authorization: Bearer` token. There is no built-in API-key scheme; pass custom headers only if your reverse proxy or IdP layer requires them.\n\nCovers DB-backed sessions, the agent registry, settings catalogs, and model/MCP/skill/sandbox providers.",
     "title": "TrueForge API",
-    "version": "0.2.0"
+    "version": "0.2.1"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -8155,6 +8178,16 @@
             }
           },
           {
+            "description": "When true and the caller is an admin, include every subject's sessions. Ignored for non-admins.",
+            "in": "query",
+            "name": "all_subjects",
+            "required": false,
+            "schema": {
+              "description": "When true and the caller is an admin, include every subject's sessions. Ignored for non-admins.",
+              "type": "boolean"
+            }
+          },
+          {
             "description": "Exact metadata pairs as metadata[key]=value. Sessions must contain all pairs.",
             "explode": true,
             "in": "query",
@@ -8328,7 +8361,7 @@
         "x-fern-sdk-method-name": "delete"
       },
       "get": {
-        "description": "Fetch a session by ID. Only the session creator may fetch it.",
+        "description": "Fetch a session by ID. Only the session owner, managers of its agent, or admins may fetch it.",
         "parameters": [
           {
             "description": "Session identifier.",
@@ -8470,6 +8503,105 @@
           "sessions"
         ],
         "x-fern-sdk-method-name": "update"
+      }
+    },
+    "/api/v1/sessions/{session_id}/assign": {
+      "post": {
+        "description": "Transfer session ownership to another user, who can then continue it. Requires the admin or session-assigner role. Rejected while a turn is running.",
+        "parameters": [
+          {
+            "description": "Session identifier.",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "description": "Session identifier.",
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetSessionResponse"
+                }
+              }
+            },
+            "description": "Session assigned."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request body."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestErrorResponse"
+                }
+              }
+            },
+            "description": "Caller may not assign sessions."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestErrorResponse"
+                }
+              }
+            },
+            "description": "Session not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestErrorResponse"
+                }
+              }
+            },
+            "description": "The session has a running turn."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestErrorResponse"
+                }
+              }
+            },
+            "description": "Session metadata cannot hold the assignment stamps."
+          }
+        },
+        "summary": "Assign a session to a user",
+        "tags": [
+          "Agent Sessions"
+        ],
+        "x-fern-sdk-group-name": [
+          "sessions"
+        ],
+        "x-fern-sdk-method-name": "assign"
       }
     },
     "/api/v1/sessions/{session_id}/cancel": {

@@ -3,13 +3,15 @@ import {
   AgentSpecSchema,
   Sessions,
   TurnNotFoundError,
+  type TurnResourceResolver,
   type TurnStreamingEvent,
 } from '@truefoundry/trueforge-core/agent-session';
 import type { Kysely } from 'kysely';
+import { inspect } from 'node:util';
 import { createLogger } from 'winston';
 import { createTurnsRouter, turnStreamId } from '../../../src/apis/turns';
 import { TrueForgeAuthorizer, type Authorizer } from '../../../src/auth/authorizer';
-import { STANDALONE_REQUEST_CONTEXT } from '../../../src/auth/identity';
+import { STANDALONE_REQUEST_CONTEXT, type RequestContext } from '../../../src/auth/identity';
 import { McpServerWithAuthStore } from '../../../src/db/McpServerWithAuthStore';
 import { migrateSqliteToLatest } from '../../../src/db/migrateSqlite';
 import { SqliteAgentStore } from '../../../src/db/sqlite/agent-store/SqliteAgentStore';
@@ -23,6 +25,9 @@ import { SqliteOAuthTokenStore } from '../../../src/db/sqlite/token-store/Sqlite
 import type { Database } from '../../../src/db/sqlite/types';
 import { ActiveTurnRegistry } from '../../../src/runtime/activeTurns';
 import { EventSubscriptionRegistry } from '../../../src/runtime/event-subscription/index.js';
+
+/** Standalone identity without the admin role, so session reads follow ownership rules. */
+const NON_ADMIN_CONTEXT: RequestContext = { ...STANDALONE_REQUEST_CONTEXT, roles: [] };
 
 function mcpServerStoreWithAuth(db: Kysely<Database>, tokenStore: SqliteOAuthTokenStore) {
   return new McpServerWithAuthStore({
@@ -76,7 +81,7 @@ describe('turns', () => {
           eventSubscriptions: new EventSubscriptionRegistry(undefined),
           resolveSandboxProviderStore: () => new SqliteSandboxProviderStore(db),
           logger: createLogger({ silent: true }),
-          resolveRequestContext: () => STANDALONE_REQUEST_CONTEXT,
+          resolveRequestContext: () => NON_ADMIN_CONTEXT,
           authorizer: new TrueForgeAuthorizer(),
         }),
       );
@@ -114,6 +119,121 @@ describe('turns', () => {
       );
       expect(downloadResponse.status).toBe(403);
       expect(await downloadResponse.json()).toEqual(forbiddenAccess);
+    });
+
+    it('lets an admin read any session turns but keeps create-turn and sandbox download owner-only', async () => {
+      const db = createSqliteDb(':memory:');
+      await migrateSqliteToLatest(db);
+      const sessionStore = new SqliteSessionStore(db);
+      await sessionStore.createSession({
+        tenant_id: 'default',
+        session_id: 's1',
+        created_by_subject: { subject_id: 'someone-else', subject_type: 'user', subject_display_name: 'someone-else' },
+        agent: {
+          type: 'inline',
+          spec: AgentSpecSchema.parse({ model: { name: 'test-provider/test-model' }, instructions: 'test' }),
+        },
+        custom: null,
+        metadata: {},
+        external_id: null,
+        source: null,
+      });
+      const app = new OpenAPIHono();
+      app.route(
+        '/',
+        createTurnsRouter({
+          sessions: new Sessions({ sessionStore }),
+          sessionStore,
+          activeTurns: new ActiveTurnRegistry(),
+          resolveModelProviderStore: () => new SqliteModelProviderStore(db),
+          resolveMcpServerStore: () => mcpServerStoreWithAuth(db, new SqliteOAuthTokenStore(db)),
+          resolveSkillStore: () => new SqliteSkillStore(db),
+          resolveAgentStore: () => new SqliteAgentStore(db),
+          eventSubscriptions: new EventSubscriptionRegistry(undefined),
+          resolveSandboxProviderStore: () => new SqliteSandboxProviderStore(db),
+          logger: createLogger({ silent: true }),
+          resolveRequestContext: () => STANDALONE_REQUEST_CONTEXT,
+          authorizer: new TrueForgeAuthorizer(),
+        }),
+      );
+
+      expect((await app.request('/s1/turns')).status).toBe(200);
+      expect((await app.request('/s1/turns/missing')).status).toBe(404);
+      expect((await app.request('/s1/turns/missing/events')).status).toBe(404);
+      expect((await app.request('/s1/turns/missing/subscribe')).status).toBe(404);
+      expect(
+        (await app.request(`/s1/turns/missing/download-sandbox-file?path=${encodeURIComponent('/workspace/f.txt')}`))
+          .status,
+      ).toBe(403);
+      expect(
+        (
+          await app.request('/s1/turns', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ stream: false }),
+          })
+        ).status,
+      ).toBe(403);
+    });
+
+    it('lets the assignee create turns after reassignment and refuses the previous owner', async () => {
+      const db = createSqliteDb(':memory:');
+      await migrateSqliteToLatest(db);
+      const sessionStore = new SqliteSessionStore(db);
+      await sessionStore.createSession({
+        tenant_id: 'default',
+        session_id: 's1',
+        created_by_subject: { subject_id: 'los-service', subject_type: 'user', subject_display_name: 'LOS' },
+        agent: {
+          type: 'inline',
+          spec: AgentSpecSchema.parse({ model: { name: 'test-provider/test-model' }, instructions: 'test' }),
+        },
+        custom: null,
+        metadata: {},
+        external_id: null,
+        source: null,
+      });
+      await sessionStore.updateSession({
+        tenant_id: 'default',
+        session_id: 's1',
+        agent: undefined,
+        title: undefined,
+        metadata: undefined,
+        created_by_subject: { subject_id: 'uw@example.com', subject_type: 'user', subject_display_name: 'UW' },
+      });
+      let caller: RequestContext = {
+        ...NON_ADMIN_CONTEXT,
+        subject: { id: 'uw@example.com', type: 'user', display_name: 'UW' },
+      };
+      const app = new OpenAPIHono();
+      app.route(
+        '/',
+        createTurnsRouter({
+          sessions: new Sessions({ sessionStore }),
+          sessionStore,
+          activeTurns: new ActiveTurnRegistry(),
+          resolveModelProviderStore: () => new SqliteModelProviderStore(db),
+          resolveMcpServerStore: () => mcpServerStoreWithAuth(db, new SqliteOAuthTokenStore(db)),
+          resolveSkillStore: () => new SqliteSkillStore(db),
+          resolveAgentStore: () => new SqliteAgentStore(db),
+          eventSubscriptions: new EventSubscriptionRegistry(undefined),
+          resolveSandboxProviderStore: () => new SqliteSandboxProviderStore(db),
+          logger: createLogger({ silent: true }),
+          resolveRequestContext: () => caller,
+          authorizer: new TrueForgeAuthorizer(),
+        }),
+      );
+      // A malformed metadata header is rejected only after the ownership check passes.
+      const createTurn = () =>
+        app.request('/s1/turns', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-tfy-metadata': 'not-json' },
+          body: JSON.stringify({ stream: false }),
+        });
+
+      expect((await createTurn()).status).toBe(400);
+      caller = { ...NON_ADMIN_CONTEXT, subject: { id: 'los-service', type: 'user', display_name: 'LOS' } };
+      expect((await createTurn()).status).toBe(403);
     });
 
     it('lets an agent manager use read routes but keeps create-turn and sandbox download creator-only', async () => {
@@ -371,6 +491,142 @@ describe('turns', () => {
       ).resolves.toBeUndefined();
 
       releaseRest?.();
+    });
+  });
+
+  describe('caller identity forwarding', () => {
+    it("sends the caller's token only to opted-in MCP servers and never to the LLM", async () => {
+      const db = createSqliteDb(':memory:');
+      await migrateSqliteToLatest(db);
+      const modelProviderStore = new SqliteModelProviderStore(db);
+      await modelProviderStore.upsertProvider({
+        tenant_id: 'default',
+        name: 'test-provider',
+        manifest: {
+          type: 'custom',
+          name: 'test-provider',
+          base_url: 'https://llm.test.example.com/v1',
+          auth: { api_key: 'sk-test' },
+          models: [
+            {
+              model_id: 'test-model',
+              name: 'test-model',
+              properties: { context_length: 128000, max_output_tokens: 4096 },
+            },
+          ],
+        },
+      });
+      const tokenStore = new SqliteOAuthTokenStore(db);
+      const mcpServerStore = mcpServerStoreWithAuth(db, tokenStore);
+      await mcpServerStore.upsertServer({
+        tenant_id: 'default',
+        name: 'los',
+        manifest: {
+          type: 'remote',
+          name: 'los',
+          url: 'https://los.example/mcp',
+          description: 'Lending MCP.',
+          forward_caller_identity: true,
+        },
+      });
+      await mcpServerStore.upsertServer({
+        tenant_id: 'default',
+        name: 'plain',
+        manifest: { type: 'remote', name: 'plain', url: 'https://plain.example/mcp', description: 'Plain MCP.' },
+      });
+
+      const caller = { ...STANDALONE_REQUEST_CONTEXT, user_credential: 'user-jwt' };
+      const agentSpec = AgentSpecSchema.parse({ model: { name: 'test-provider/test-model' } });
+      let captured: TurnResourceResolver | undefined;
+      const sessions = {
+        get: () =>
+          Promise.resolve({
+            session_id: 's1',
+            tenant_id: caller.tenant_id,
+            spec: agentSpec,
+            record: {
+              last_turn_id: null,
+              created_by_subject: {
+                subject_id: caller.subject.id,
+                subject_type: caller.subject.type,
+                subject_display_name: caller.subject.display_name,
+              },
+              agent: { type: 'inline', spec: agentSpec },
+            },
+            createTurn: (input: { resolver: TurnResourceResolver }) => {
+              captured = input.resolver;
+              return Promise.resolve({
+                id: 'turn-identity',
+                record: {
+                  turn_id: 'turn-identity',
+                  session_id: 's1',
+                  previous_turn_id: null,
+                  input: [],
+                  state: { status: 'running' },
+                  created_at: new Date('2026-01-01T00:00:00.000Z'),
+                },
+                stream: async function* stream() {
+                  yield {
+                    type: 'turn.created',
+                    id: 'evt_created',
+                    turn_id: 'turn-identity',
+                    previous_turn_id: null,
+                    state: { status: 'running' },
+                    created_at: '2026-01-01T00:00:00.000Z',
+                    thread_id: null,
+                  };
+                },
+              });
+            },
+          }),
+      } as unknown as Sessions;
+
+      const app = new OpenAPIHono();
+      app.route(
+        '/',
+        createTurnsRouter({
+          sessions,
+          sessionStore: new SqliteSessionStore(db),
+          activeTurns: new ActiveTurnRegistry(),
+          resolveModelProviderStore: () => modelProviderStore,
+          resolveMcpServerStore: () => mcpServerStore,
+          resolveAgentStore: () => new SqliteAgentStore(db),
+          resolveSkillStore: () => new SqliteSkillStore(db),
+          eventSubscriptions: new EventSubscriptionRegistry<TurnStreamingEvent>(undefined),
+          resolveSandboxProviderStore: () => new SqliteSandboxProviderStore(db),
+          logger: createLogger({ silent: true }),
+          resolveRequestContext: () => caller,
+          authorizer: new TrueForgeAuthorizer(),
+        }),
+      );
+
+      const response = await app.request('/s1/turns', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ stream: false }),
+      });
+      expect(response.status).toBe(200);
+      if (captured === undefined) {
+        throw new Error('expected createTurn to receive a resolver');
+      }
+      // deps is protected on the core resolver; the test reads the wired hooks directly.
+      const resolverDeps = captured['deps'];
+
+      const los = await resolverDeps.mcp('los');
+      expect(los.headers).toEqual({
+        'X-TrueForge-User': caller.subject.id,
+        'X-TrueForge-User-Token': 'user-jwt',
+        'X-TrueForge-Session-Id': 's1',
+        'X-TrueForge-Turn-Id': expect.any(String),
+      });
+      const plain = await resolverDeps.mcp('plain');
+      expect(plain.headers).toEqual({});
+
+      const llm = await resolverDeps.llm('test-provider/test-model');
+      const llmState = inspect(llm.modelClient, { depth: 6 });
+      expect(llmState).toContain('llm.test.example.com');
+      expect(llmState).not.toContain('user-jwt');
+      expect(llmState).not.toContain('X-TrueForge');
     });
   });
 

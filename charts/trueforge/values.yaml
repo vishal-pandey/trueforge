@@ -166,6 +166,8 @@ configs:
     userDisplayNameClaim: name
     userRoleClaim: groups
     adminRoleValue: admin
+    # Optional role value allowed to assign sessions to other users (defaults to adminRoleValue).
+    sessionAssignerRoleValue: ""
     scopes: "openid,profile,email"
     # Optional comma-separated exact emails and/or * globs (e.g. "*@company.com").
     # Empty = unrestricted. Matched against the ID token `email` claim.

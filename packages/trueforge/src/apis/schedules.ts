@@ -108,6 +108,8 @@ export async function startScheduleRunOnRequest<TTransaction>(params: {
     input: prepared.input,
     previous_turn_id: prepared.previous_turn_id,
     userRef: prepared.userRef,
+    // Runs as the schedule creator with no live credential of theirs to forward.
+    callerIdentity: { subject_id: prepared.userRef, user_credential: null },
     resolveTurnHeaders: gatewayTurnHeaders,
     deps: {
       activeTurns: deps.activeTurns,

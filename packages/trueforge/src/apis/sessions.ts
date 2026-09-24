@@ -5,6 +5,7 @@ import { OpenAPIHono, type RouteHandler } from '@hono/zod-openapi';
 import type { ISessionStore, SessionHandle, SessionRecord, Sessions } from '@truefoundry/trueforge-core/agent-session';
 import {
   CancellationReason,
+  SessionMetadataSchema,
   SessionStoreConflictError,
   SessionStoreInvariantError,
   SessionStoreNotFoundError,
@@ -22,13 +23,19 @@ import type { RedisClientType } from 'redis';
 import type { Logger } from 'winston';
 import { z } from 'zod';
 import type { Authorizer } from '../auth/authorizer';
-import { createdBySubjectFromRequestContext, type ResolveRequestContext } from '../auth/identity';
+import {
+  canAssignSessions,
+  createdBySubjectFromRequestContext,
+  hasAdminRole,
+  type ResolveRequestContext,
+} from '../auth/identity';
 import configuration from '../config';
 import type { IAgentStore } from '../db/agentStore';
 import type { IMcpServerStore } from '../db/mcpServerStore';
 import type { IModelProviderStore } from '../db/modelProviderStore';
 import type { ISandboxProviderStore } from '../db/sandboxProviderStore';
 import {
+  assignSessionRoute,
   cancelSessionRoute,
   createSessionRoute,
   deleteSessionRoute,
@@ -43,7 +50,7 @@ import { validateAgentSpec } from '../runtime/sessionResources';
 import { honoQueriesToRecord } from '../schemas/deepObjectQuery';
 import { isSessionAgentNameRef, parseListSessionsQuery, type Session } from '../schemas/session';
 import { newId } from '../utils/id';
-import { agentIfAccessible, canReadAgentBoundResource, resolveManagedAgentIds } from './agentAccess';
+import { agentIfAccessible, canReadSession, resolveManagedAgentIds } from './agentAccess';
 import type { ResolveSkillStore } from './skills';
 
 /** Request-reply path a replica serves to cancel a turn it owns. */
@@ -253,12 +260,11 @@ function createGetOrCreateSessionByExternalIdHandler(
     });
     if (existing !== undefined) {
       if (
-        !(await canReadAgentBoundResource({
+        !(await canReadSession({
           store: deps.resolveAgentStore(c),
           context: requestContext,
           authorizer: deps.authorizer,
-          agent_id: existing.record.agent.type === 'reference' ? existing.record.agent.id : undefined,
-          created_by_subject_id: existing.record.created_by_subject.subject_id,
+          record: existing.record,
         }))
       ) {
         return c.json({ error: { message: FORBIDDEN_SESSION_ACCESS } }, 403);
@@ -302,12 +308,11 @@ function createGetOrCreateSessionByExternalIdHandler(
     });
     if (
       !created &&
-      !(await canReadAgentBoundResource({
+      !(await canReadSession({
         store: deps.resolveAgentStore(c),
         context: requestContext,
         authorizer: deps.authorizer,
-        agent_id: session.record.agent.type === 'reference' ? session.record.agent.id : undefined,
-        created_by_subject_id: session.record.created_by_subject.subject_id,
+        record: session.record,
       }))
     ) {
       return c.json({ error: { message: FORBIDDEN_SESSION_ACCESS } }, 403);
@@ -384,12 +389,11 @@ export function createSessionsRouter(deps: SessionsRouterDeps) {
       return c.json({ error: { message: `Session not found: ${sessionId}` } }, 404);
     }
     if (
-      !(await canReadAgentBoundResource({
+      !(await canReadSession({
         store: deps.resolveAgentStore(c),
         context: requestContext,
         authorizer: deps.authorizer,
-        agent_id: record.agent.type === 'reference' ? record.agent.id : undefined,
-        created_by_subject_id: record.created_by_subject.subject_id,
+        record: record,
       }))
     ) {
       return c.json({ error: { message: FORBIDDEN_SESSION_ACCESS } }, 403);
@@ -461,6 +465,7 @@ export function createSessionsRouter(deps: SessionsRouterDeps) {
         agent: body.agent === undefined ? undefined : { type: 'inline', spec: body.agent.spec },
         title: body.title,
         metadata: body.metadata,
+        created_by_subject: undefined,
       });
     } catch (error) {
       if (error instanceof SessionStoreNotFoundError) {
@@ -484,20 +489,24 @@ export function createSessionsRouter(deps: SessionsRouterDeps) {
   const listSessionsHandler: RouteHandler<typeof listSessionsRoute> = async c => {
     const query = parseListSessionsQuery(honoQueriesToRecord(c.req.queries()));
     const requestContext = deps.resolveRequestContext(c);
+    const listAllSubjects = query.all_subjects === true && query.created_by_me !== true && hasAdminRole(requestContext);
     try {
-      const managedAgentIds = query.created_by_me
-        ? []
-        : await resolveManagedAgentIds({
-            store: deps.resolveAgentStore(c),
-            context: requestContext,
-            authorizer: deps.authorizer,
-          });
+      const managedAgentIds =
+        query.created_by_me || listAllSubjects
+          ? []
+          : await resolveManagedAgentIds({
+              store: deps.resolveAgentStore(c),
+              context: requestContext,
+              authorizer: deps.authorizer,
+            });
       const { data, pagination } = await deps.sessionStore.listSessions({
         agent_id: query.agent_id,
-        created_by_or_agent_ids: {
-          created_by_subject_id: requestContext.subject.id,
-          agent_ids: managedAgentIds,
-        },
+        created_by_or_agent_ids: listAllSubjects
+          ? undefined
+          : {
+              created_by_subject_id: requestContext.subject.id,
+              agent_ids: managedAgentIds,
+            },
         tenant_id: requestContext.tenant_id,
         metadata: query.metadata,
         limit: query.limit,
@@ -515,6 +524,64 @@ export function createSessionsRouter(deps: SessionsRouterDeps) {
       }
       throw error;
     }
+  };
+
+  const assignSessionHandler: RouteHandler<typeof assignSessionRoute> = async c => {
+    const { session_id: sessionId } = c.req.valid('param');
+    const body = c.req.valid('json');
+    const requestContext = deps.resolveRequestContext(c);
+    if (!canAssignSessions(requestContext)) {
+      return c.json({ error: { message: 'Only admins or session assigners can assign sessions' } }, 403);
+    }
+    const existing = await deps.sessionStore.getSession({
+      tenant_id: requestContext.tenant_id,
+      session_id: sessionId,
+    });
+    if (!existing) {
+      return c.json({ error: { message: `Session not found: ${sessionId}` } }, 404);
+    }
+    if (existing.last_turn_id !== null) {
+      const lastTurn = await deps.sessionStore.getTurn({ session_id: sessionId, turn_id: existing.last_turn_id });
+      if (lastTurn?.state.status === 'running') {
+        return c.json({ error: { message: 'Cannot assign a session while a turn is running' } }, 409);
+      }
+    }
+    // Metadata is replaced wholesale on update, so stamp on top of the stored map.
+    const metadata = SessionMetadataSchema.safeParse({
+      ...existing.metadata,
+      assigned_by: requestContext.subject.id,
+      assigned_at: new Date().toISOString(),
+    });
+    if (!metadata.success) {
+      return c.json({ error: { message: `Session metadata cannot hold assignment: ${metadata.error.message}` } }, 422);
+    }
+    try {
+      await deps.sessionStore.updateSession({
+        tenant_id: requestContext.tenant_id,
+        session_id: sessionId,
+        agent: undefined,
+        title: undefined,
+        metadata: metadata.data,
+        created_by_subject: {
+          subject_id: body.subject_id,
+          subject_type: 'user',
+          subject_display_name: body.subject_display_name ?? body.subject_id,
+        },
+      });
+    } catch (error) {
+      if (error instanceof SessionStoreNotFoundError) {
+        return c.json({ error: { message: `Session not found: ${sessionId}` } }, 404);
+      }
+      throw error;
+    }
+    const record = await deps.sessionStore.getSession({
+      tenant_id: requestContext.tenant_id,
+      session_id: sessionId,
+    });
+    if (!record) {
+      return c.json({ error: { message: `Session not found: ${sessionId}` } }, 404);
+    }
+    return c.json({ data: toWireSession(record) }, 200);
   };
 
   const cancelSessionHandler: RouteHandler<typeof cancelSessionRoute> = async c => {
@@ -556,12 +623,11 @@ export function createSessionsRouter(deps: SessionsRouterDeps) {
       return c.json({ error: { message: `Session not found: ${sessionId}` } }, 404);
     }
     if (
-      !(await canReadAgentBoundResource({
+      !(await canReadSession({
         store: deps.resolveAgentStore(c),
         context: requestContext,
         authorizer: deps.authorizer,
-        agent_id: session.record.agent.type === 'reference' ? session.record.agent.id : undefined,
-        created_by_subject_id: session.record.created_by_subject.subject_id,
+        record: session.record,
       }))
     ) {
       return c.json({ error: { message: FORBIDDEN_SESSION_ACCESS } }, 403);
@@ -591,6 +657,7 @@ export function createSessionsRouter(deps: SessionsRouterDeps) {
   router.openapi(updateSessionRoute, updateSessionHandler);
   router.openapi(listSessionsRoute, listSessionsHandler);
   router.openapi(cancelSessionRoute, cancelSessionHandler);
+  router.openapi(assignSessionRoute, assignSessionHandler);
   router.openapi(listSessionEventsRoute, listSessionEventsHandler);
   deps.requestReplyRouter.registerRoute(SESSIONS_CANCEL_PATH, cancelSessionTurnPeerHandler(deps.activeTurns));
   return router;

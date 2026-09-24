@@ -467,6 +467,8 @@ function resolveOIDCConfig(): OIDCConfig | undefined {
         '(unset = fixed local admin identity, no IdP).',
     );
   }
+  const adminRoleValue =
+    getEnv('OIDC_ADMIN_ROLE_VALUE', { defaultValue: DEFAULT_OIDC_ADMIN_ROLE_VALUE }) ?? DEFAULT_OIDC_ADMIN_ROLE_VALUE;
   return {
     OIDC_ISSUER_URL: issuerUrl,
     OIDC_CLIENT_ID: clientId,
@@ -479,8 +481,9 @@ function resolveOIDCConfig(): OIDCConfig | undefined {
       DEFAULT_OIDC_USER_DISPLAY_NAME_CLAIM,
     OIDC_USER_ROLE_CLAIM:
       getEnv('OIDC_USER_ROLE_CLAIM', { defaultValue: DEFAULT_OIDC_USER_ROLE_CLAIM }) ?? DEFAULT_OIDC_USER_ROLE_CLAIM,
-    OIDC_ADMIN_ROLE_VALUE:
-      getEnv('OIDC_ADMIN_ROLE_VALUE', { defaultValue: DEFAULT_OIDC_ADMIN_ROLE_VALUE }) ?? DEFAULT_OIDC_ADMIN_ROLE_VALUE,
+    OIDC_ADMIN_ROLE_VALUE: adminRoleValue,
+    OIDC_SESSION_ASSIGNER_ROLE_VALUE:
+      getEnv('OIDC_SESSION_ASSIGNER_ROLE_VALUE', { defaultValue: adminRoleValue }) ?? adminRoleValue,
     OIDC_SCOPES: parseOidcScopes(getEnv('OIDC_SCOPES', { defaultValue: DEFAULT_OIDC_SCOPES }) ?? DEFAULT_OIDC_SCOPES),
     OIDC_ALLOWED_EMAILS: parseOidcAllowedEmails(getEnv('OIDC_ALLOWED_EMAILS')),
   };
@@ -514,6 +517,10 @@ export interface OIDCConfig {
    * Case sensitive. Optional; defaults to "admin"
    */
   OIDC_ADMIN_ROLE_VALUE: string;
+  /** Role claim value that may reassign session ownership (admins always may).
+   * Case sensitive. Optional; defaults to `OIDC_ADMIN_ROLE_VALUE`. Env: `OIDC_SESSION_ASSIGNER_ROLE_VALUE`.
+   */
+  OIDC_SESSION_ASSIGNER_ROLE_VALUE: string;
   /** Comma-separated OAuth scopes for the authorization request. Env: `OIDC_SCOPES`.
    * Optional; defaults to "openid,profile,email". Whitespace around entries is stripped.
    * Okta `groups` claims require the `groups` scope; Azure AD app roles typically omit it.

@@ -3,6 +3,7 @@ import { AgentSpecSchema, Sessions } from '@truefoundry/trueforge-core/agent-ses
 import { RequestReplyRouter } from '@truefoundry/trueforge-core/request-reply';
 import { createClient } from 'redis';
 import { createLogger } from 'winston';
+import { makeCreateTurnInput } from '../../../../trueforge-core/tests/agent-session/testHelpers';
 import { createInternalMetricsRouter } from '../../../src/apis/sessionMetrics';
 import {
   createInternalSessionsRouter,
@@ -10,7 +11,7 @@ import {
   type SessionsRouterDeps,
 } from '../../../src/apis/sessions';
 import { TrueForgeAuthorizer, type Authorizer } from '../../../src/auth/authorizer';
-import { STANDALONE_REQUEST_CONTEXT } from '../../../src/auth/identity';
+import { STANDALONE_REQUEST_CONTEXT, type RequestContext } from '../../../src/auth/identity';
 import { migrateSqliteToLatest } from '../../../src/db/migrateSqlite';
 import { SqliteAgentStore } from '../../../src/db/sqlite/agent-store/SqliteAgentStore';
 import { createSqliteDb } from '../../../src/db/sqlite/client';
@@ -21,7 +22,7 @@ import { SqliteSessionMetricsStore } from '../../../src/db/sqlite/session-metric
 import { SqliteSessionStore } from '../../../src/db/sqlite/session-store/SqliteSessionStore';
 import { SqliteSkillStore } from '../../../src/db/sqlite/skill-store/SqliteSkillStore';
 import { ActiveTurnRegistry } from '../../../src/runtime/activeTurns';
-import { ListSessionsResponseSchema } from '../../../src/schemas/session';
+import { GetSessionResponseSchema, ListSessionsResponseSchema } from '../../../src/schemas/session';
 import {
   GetSessionMetricsChartDataResponseSchema,
   GetSessionMetricsChartResponseSchema,
@@ -41,6 +42,9 @@ function jsonInit(method: string, body: unknown): RequestInit {
   };
 }
 
+/** Standalone identity without the admin role, so session reads follow ownership rules. */
+const NON_ADMIN_CONTEXT: RequestContext = { ...STANDALONE_REQUEST_CONTEXT, roles: [] };
+
 const deniedCanAccessAgent = jest.fn((_input: Parameters<Authorizer['canAccessAgent']>[0]) => Promise.resolve(false));
 const denyAllAuthorizer: Authorizer = {
   listAgentAccess: () => Promise.resolve({ kind: 'agent_external_ids', agent_external_ids: [] }),
@@ -57,8 +61,10 @@ describe('sessions HTTP agent binding', () => {
   let sessionStore: SqliteSessionStore;
   let sessionMetricsStore: SqliteSessionMetricsStore;
   let sessionDeps: SessionsRouterDeps;
+  let requestContext: RequestContext;
 
   beforeEach(async () => {
+    requestContext = STANDALONE_REQUEST_CONTEXT;
     const db = createSqliteDb(':memory:');
     await migrateSqliteToLatest(db);
     sessionStore = new SqliteSessionStore(db);
@@ -98,7 +104,7 @@ describe('sessions HTTP agent binding', () => {
       resolveSandboxProviderStore: () => sandboxProviderStore,
       redis: createClient(),
       requestReplyRouter: new RequestReplyRouter(),
-      resolveRequestContext: () => STANDALONE_REQUEST_CONTEXT,
+      resolveRequestContext: () => requestContext,
       logger: createLogger({ silent: true }),
       authorizer: new TrueForgeAuthorizer(),
     };
@@ -356,6 +362,7 @@ describe('sessions HTTP agent binding', () => {
   });
 
   it("rejects access to another user's session on get/update/delete/cancel/events and scopes list", async () => {
+    requestContext = NON_ADMIN_CONTEXT;
     await sessionStore.createSession({
       tenant_id: 'default',
       session_id: 'other-user-session',
@@ -615,6 +622,7 @@ describe('sessions HTTP agent binding', () => {
   });
 
   it('POST get-or-create-by-external-id is idempotent and 403s for another creator', async () => {
+    requestContext = NON_ADMIN_CONTEXT;
     const publicPath = await app.request(
       '/get-or-create-by-external-id',
       jsonInit('POST', { external_id: 'run-abc', agent: { spec: inlineSpec } }),
@@ -705,5 +713,107 @@ describe('sessions HTTP agent binding', () => {
   it('rejects create bodies that mix name and AgentSpec fields', async () => {
     const both = await app.request('/', jsonInit('POST', { agent: { name: 'named-agent', ...inlineSpec } }));
     expect(both.status).toBe(400);
+  });
+
+  describe('admin read access', () => {
+    beforeEach(async () => {
+      await sessionStore.createSession({
+        tenant_id: 'default',
+        session_id: 'uw-session',
+        created_by_subject: { subject_id: 'uw@example.com', subject_type: 'user', subject_display_name: 'UW' },
+        agent: { type: 'inline', spec: inlineSpec },
+        custom: null,
+        metadata: {},
+        external_id: null,
+        source: null,
+      });
+    });
+
+    it('lets an admin read any session but not modify it', async () => {
+      expect((await app.request('/uw-session')).status).toBe(200);
+      expect((await app.request('/uw-session/events')).status).toBe(200);
+      expect((await app.request('/uw-session', jsonInit('PATCH', { title: 'nope' }))).status).toBe(403);
+      expect((await app.request('/uw-session/cancel', { method: 'POST' })).status).toBe(403);
+      expect((await app.request('/uw-session', { method: 'DELETE' })).status).toBe(403);
+    });
+
+    it('lists every subject only for admins that ask with all_subjects', async () => {
+      const ids = async (path: string) =>
+        ListSessionsResponseSchema.parse(await (await app.request(path)).json()).data.map(session => session.id);
+      expect(await ids('/')).not.toContain('uw-session');
+      expect(await ids('/?all_subjects=true')).toContain('uw-session');
+      expect(await ids('/?all_subjects=true&created_by_me=true')).not.toContain('uw-session');
+
+      requestContext = NON_ADMIN_CONTEXT;
+      expect(await ids('/?all_subjects=true')).not.toContain('uw-session');
+      expect((await app.request('/uw-session')).status).toBe(403);
+    });
+  });
+
+  describe('POST /{session_id}/assign', () => {
+    beforeEach(async () => {
+      await sessionStore.createSession({
+        tenant_id: 'default',
+        session_id: 'loan-1',
+        created_by_subject: { subject_id: 'los-service', subject_type: 'user', subject_display_name: 'LOS' },
+        agent: { type: 'inline', spec: inlineSpec },
+        custom: null,
+        metadata: { application_id: 'APP-1' },
+        external_id: 'APP-1',
+        source: null,
+      });
+    });
+
+    it('rejects callers without the admin or assigner role', async () => {
+      requestContext = {
+        ...NON_ADMIN_CONTEXT,
+        subject: { id: 'los-service', type: 'user', display_name: 'LOS' },
+      };
+      const res = await app.request('/loan-1/assign', jsonInit('POST', { subject_id: 'uw@example.com' }));
+      expect(res.status).toBe(403);
+      const stored = await sessionStore.getSession({ tenant_id: 'default', session_id: 'loan-1' });
+      expect(stored?.created_by_subject.subject_id).toBe('los-service');
+    });
+
+    it('returns 404 for a missing session', async () => {
+      const res = await app.request('/missing/assign', jsonInit('POST', { subject_id: 'uw@example.com' }));
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 409 while the latest turn is running', async () => {
+      await sessionStore.createTurn(makeCreateTurnInput({ sessionId: 'loan-1', turnId: 'turn-running' }));
+      const res = await app.request('/loan-1/assign', jsonInit('POST', { subject_id: 'uw@example.com' }));
+      expect(res.status).toBe(409);
+    });
+
+    it('transfers ownership and stamps who assigned it', async () => {
+      const res = await app.request(
+        '/loan-1/assign',
+        jsonInit('POST', { subject_id: 'uw@example.com', subject_display_name: 'Uma Writer' }),
+      );
+      expect(res.status).toBe(200);
+      const { data } = GetSessionResponseSchema.parse(await res.json());
+      expect(data.created_by_subject).toEqual({
+        subject_id: 'uw@example.com',
+        subject_type: 'user',
+        subject_display_name: 'Uma Writer',
+      });
+      expect(data.metadata).toMatchObject({
+        application_id: 'APP-1',
+        assigned_by: STANDALONE_REQUEST_CONTEXT.subject.id,
+      });
+      expect(Number.isNaN(Date.parse(data.metadata['assigned_at'] ?? ''))).toBe(false);
+
+      requestContext = {
+        ...NON_ADMIN_CONTEXT,
+        subject: { id: 'uw@example.com', type: 'user', display_name: 'Uma Writer' },
+      };
+      const listed = ListSessionsResponseSchema.parse(await (await app.request('/')).json());
+      expect(listed.data.map(session => session.id)).toContain('loan-1');
+      expect((await app.request('/loan-1', jsonInit('PATCH', { title: 'Mine now' }))).status).toBe(200);
+
+      requestContext = { ...NON_ADMIN_CONTEXT, subject: { id: 'los-service', type: 'user', display_name: 'LOS' } };
+      expect((await app.request('/loan-1')).status).toBe(403);
+    });
   });
 });

@@ -29,6 +29,7 @@ export type CreateSessionInput<TSessionCustom extends object = Record<string, ne
  * PATCH fields for an existing session; `undefined` fields are left unchanged.
  * `agent` may be set only on inline sessions, and only as an inline arm (`{ type: 'inline', spec }`).
  * `metadata` when set fully replaces the stored map (`{}` clears).
+ * `created_by_subject` when set transfers session ownership.
  */
 export type UpdateSessionInput<TSessionCustom extends object = Record<string, never>> = Pick<
   SessionRecord<TSessionCustom>,
@@ -37,6 +38,7 @@ export type UpdateSessionInput<TSessionCustom extends object = Record<string, ne
   agent: Extract<SessionRecord<TSessionCustom>['agent'], { type: 'inline' }> | undefined;
   title: SessionRecord<TSessionCustom>['title'] | undefined;
   metadata: SessionRecord<TSessionCustom>['metadata'] | undefined;
+  created_by_subject: SessionRecord<TSessionCustom>['created_by_subject'] | undefined;
 };
 
 export interface GetSessionInput {
@@ -247,7 +249,7 @@ export interface ISessionStore<
   /**
    * Persists a discriminated `agent` (ref | value). SQL backends may flatten to columns.
    * `session_id` is globally unique across tenants.
-   * Persists caller-supplied `created_by_subject` (immutable after create).
+   * Persists caller-supplied `created_by_subject` (changed later only by an ownership transfer).
    * Sets `last_activity_timestamp_ms` (= now) on create.
    */
   createSession(input: CreateSessionInput<TSessionCustom>): Promise<void>;

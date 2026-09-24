@@ -77,6 +77,17 @@ export function hasAdminRole(requestContext: Pick<RequestContext, 'roles'>): boo
   }
 }
 
+/** Whether the caller may reassign session ownership: admins, or OIDC callers holding `OIDC_SESSION_ASSIGNER_ROLE_VALUE`. */
+export function canAssignSessions(requestContext: Pick<RequestContext, 'roles'>): boolean {
+  if (hasAdminRole(requestContext)) {
+    return true;
+  }
+  if (getTrueForgeAuthMode() !== TrueForgeAuthMode.Oidc || !isOidcConfigured(configuration)) {
+    return false;
+  }
+  return requestContext.roles.includes(configuration.OIDC.OIDC_SESSION_ASSIGNER_ROLE_VALUE);
+}
+
 /** Subject rebuilt from a stored creator snapshot, for work that runs without a live request. */
 export function requestSubjectFromCreatedBySubject(subject: CreatedBySubject): RequestSubject {
   return {

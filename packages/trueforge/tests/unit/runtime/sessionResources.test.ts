@@ -22,6 +22,7 @@ import {
   mergeGatewayMetadata,
   parseGatewayMetadataHeader,
   TFG_METADATA_PREFIX,
+  turnMcpHeaders,
   validateAgentSpec,
   withGatewayMetadataHeaders,
   X_TFY_METADATA,
@@ -158,6 +159,73 @@ describe('withGatewayMetadataHeaders', () => {
     }
     await expect(authRequired()).resolves.toEqual({
       authRequired: { servers: [{ id: 'mcp', name: 'mcp', auth_url: 'https://auth.example' }] },
+    });
+  });
+});
+
+describe('turnMcpHeaders', () => {
+  const callerIdentity = { subject_id: 'uw@example.com', user_credential: 'user-jwt' };
+  const turnHeaders = { [X_TFY_METADATA]: '{"k":"v"}' };
+
+  it('adds caller identity headers only for opted-in servers', () => {
+    const flagged = turnMcpHeaders({
+      connection: {
+        url: 'https://mcp.example/mcp',
+        headers: { Authorization: 'Bearer static' },
+        forward_caller_identity: true,
+      },
+      turnHeaders,
+      callerIdentity,
+      sessionId: 'sess-1',
+      turnId: 'turn-1',
+    });
+    expect(flagged).toEqual({
+      Authorization: 'Bearer static',
+      [X_TFY_METADATA]: '{"k":"v"}',
+      'X-TrueForge-User': 'uw@example.com',
+      'X-TrueForge-User-Token': 'user-jwt',
+      'X-TrueForge-Session-Id': 'sess-1',
+      'X-TrueForge-Turn-Id': 'turn-1',
+    });
+
+    const unflagged = turnMcpHeaders({
+      connection: {
+        url: 'https://mcp.example/mcp',
+        headers: { Authorization: 'Bearer static' },
+        forward_caller_identity: false,
+      },
+      turnHeaders,
+      callerIdentity,
+      sessionId: 'sess-1',
+      turnId: 'turn-1',
+    });
+    expect(unflagged).toEqual({ Authorization: 'Bearer static', [X_TFY_METADATA]: '{"k":"v"}' });
+    // The caller's credential never leaks into the shared turn headers (also sent to LLM providers).
+    expect(turnHeaders).toEqual({ [X_TFY_METADATA]: '{"k":"v"}' });
+  });
+
+  it('omits the token header when the turn has no live credential', async () => {
+    const headers = turnMcpHeaders({
+      connection: {
+        url: 'https://mcp.example/mcp',
+        headers: async () => ({ headers: { Authorization: 'Bearer oauth' } }),
+        forward_caller_identity: true,
+      },
+      turnHeaders: {},
+      callerIdentity: { subject_id: 'scheduler', user_credential: null },
+      sessionId: 'sess-1',
+      turnId: 'turn-1',
+    });
+    if (typeof headers !== 'function') {
+      throw new Error('expected async header resolver');
+    }
+    await expect(headers()).resolves.toEqual({
+      headers: {
+        Authorization: 'Bearer oauth',
+        'X-TrueForge-User': 'scheduler',
+        'X-TrueForge-Session-Id': 'sess-1',
+        'X-TrueForge-Turn-Id': 'turn-1',
+      },
     });
   });
 });
