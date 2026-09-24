@@ -169,7 +169,7 @@ describe('managed kubernetes provider', () => {
         sandboxProviders: {
           get: async () => {
             getCalls++;
-            throw new TrueForgeApi.NotFoundError({});
+            throw new TrueForgeApi.NotFoundError({ error: { message: 'No sandbox provider configured' } });
           },
         },
       },

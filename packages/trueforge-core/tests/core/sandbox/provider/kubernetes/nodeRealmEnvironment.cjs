@@ -4,6 +4,7 @@
  * realm only, so inside Jest's VM context it is undefined ("removeAbortListener is not a
  * function"). Share the host realm's well-known dispose symbols with the test context.
  */
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- Jest loads custom environments as CommonJS
 const { TestEnvironment } = require('jest-environment-node');
 
 class NodeRealmEnvironment extends TestEnvironment {
