@@ -69,7 +69,7 @@ jobs:
         include:
           - image: trueforge
             context: .
-            dockerfile: ./Dockerfile.dev
+            dockerfile: ./deploy/homelab/server.Dockerfile
           - image: trueforge-sandbox
             context: .
             dockerfile: ./deploy/homelab/sandbox.Dockerfile
