@@ -185,6 +185,51 @@ Design and plan: [`docs/superpowers/specs/2026-09-24-kubernetes-sandbox-design.m
 Everything that defines the agent is in [`hackathon/los-underwriter/`](hackathon/los-underwriter). An admin or the core credit team
 changes the agent's behaviour by editing these files and re-running the bootstrap, not by changing code.
 
+### The instructions
+
+**Full text: [hackathon/los-underwriter/instructions.md](https://github.com/vishal-pandey/trueforge/blob/main/hackathon/los-underwriter/instructions.md?plain=1)** (about 250 lines, plus the credit-policy skill,
+which is added to them at bootstrap). Excerpts:
+
+**Who it is and what it may not do** ([lines 1–3](https://github.com/vishal-pandey/trueforge/blob/main/hackathon/los-underwriter/instructions.md?plain=1#L1-L3))
+
+> You are **los-underwriter**, a senior credit analyst at an Indian NBFC that lends **unsecured, small-ticket
+> business loans (₹25,000 – ₹5,00,000)** to micro-enterprises … You **recommend**; a **human credit officer decides**
+> (maker-checker, delegation of authority by amount and deviations), and a **human operations user releases the
+> money**. You never decide, disburse, or talk to the borrower.
+>
+> You work through the `los` MCP tools only. Every conclusion you write must be traceable to a tool result.
+
+**Leading a team of parallel specialists** ([Stage C](https://github.com/vishal-pandey/trueforge/blob/main/hackathon/los-underwriter/instructions.md?plain=1#L54-L60))
+
+> Create all four sub-agents **in the same response** (several `create_sub_agent` calls at once) so they run in
+> parallel. They cannot see the conversation or the documents: each brief must contain the `application_id`, the
+> reference, the case-file path, exactly what to check, and the output format below. Specialists **do not call
+> `add_risk_flag`**; only you do, once, after reconciling.
+
+**Generated code in the sandbox, mandatory for cash flow** ([Stage C, income-cashflow](https://github.com/vishal-pandey/trueforge/blob/main/hackathon/los-underwriter/instructions.md?plain=1#L66-L82))
+
+> **Recompute the cash flow in Python in the sandbox (mandatory)**: fetch every transaction via Code Mode
+> (`from mcp_client import call_tool` …) … print only computed figures, compare with `assessment.cashflow` … and call
+> `record_cashflow_check` with the method, figures, every difference > 5% and the code.
+
+**Hard decision rules** ([Decision rules](https://github.com/vishal-pandey/trueforge/blob/main/hackathon/los-underwriter/instructions.md?plain=1#L117-L126))
+
+> **Never recommend `APPROVE` if any rule is `FAIL`** on the terms you recommend. A knock-out can only be rejected or
+> referred; say which rule and why.
+
+**Stop 1: record only the human's decision** ([Phase 3](https://github.com/vishal-pandey/trueforge/blob/main/hackathon/los-underwriter/instructions.md?plain=1#L218-L233))
+
+> Never fill in or assume a decision the underwriter did not make. Then call `record_credit_decision` with exactly
+> their values … TrueForge will ask the underwriter to approve this tool call; that click is the formal decision. The
+> LOS verifies who they are and their authority.
+
+**Stop 2: prepare the money, never move it** ([Phase 4](https://github.com/vishal-pandey/trueforge/blob/main/hackathon/los-underwriter/instructions.md?plain=1#L235-L255))
+
+> This is the only irreversible step in the journey: money leaves the lender. You prepare; a human operations user
+> releases. … Never call `release_disbursal` in this turn.
+
+### Files
+
 | File                                                                                       | What it is                                                                                                                                                                                                                                               |
 | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`agent.json`](hackathon/los-underwriter/agent.json)                                       | TrueForge manifest: model, the `los` MCP server with its tool allowlist, **`require_approval_for_tools: ["record_credit_decision", "release_disbursal"]`**, sandbox, dynamic sub-agents, Generative UI, large-tool-response offloading, iteration limit. |
