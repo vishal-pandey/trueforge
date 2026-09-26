@@ -14,6 +14,8 @@ a human**: before the credit decision and before any money moves.
 > The judge account is an **underwriter and operations user**, not a TrueForge admin. It sees the cases assigned to
 > it, can talk to the agent and can approve or deny the gated tools.
 
+> **Solution write-up (1 page):** [SOLUTION.pdf](SOLUTION.pdf) · [SOLUTION.md](SOLUTION.md)
+
 > **AI assistance:** built with [Claude Code](https://claude.com/claude-code) (Anthropic). [Details](#built-with-claude-code).
 
 - [The job](#the-job-and-why-its-worth-handing-over)
