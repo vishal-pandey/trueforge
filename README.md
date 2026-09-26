@@ -1,3 +1,9 @@
+> [!NOTE]
+> **Hackathon fork (TrueFoundry × Polaris, "Agents That Act").** This fork adds session assignment, caller-identity
+> forwarding to MCP, Generative UI form submit and a Kubernetes sandbox provider, and uses them for a micro-loan
+> underwriting agent that stops for a human before the credit decision and before money moves.
+> **Read [hackathon/README.md](hackathon/README.md)** · live at **https://trueforge.itl.it.com**
+
 <p align="center">
   <a href="https://trueforge.dev">
     <picture>

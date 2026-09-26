@@ -1,0 +1,66 @@
+{
+  "name": "los-underwriter",
+  "description": "Credit underwriter for unsecured micro-enterprise business loans (INR 25k-5L). Investigates an LOS application through the los MCP tools (recomputing cash flow with code in the sandbox), submits a recommendation, presents a Generative UI decision desk to the assigned human underwriter and records their decision; later prepares the disbursal release for an operations user. Both human steps are approval-gated with verified identity.",
+  "manifest": {
+    "model": {
+      "name": "${MODEL}"
+    },
+    "instructions": "${file:instructions.md}",
+    "mcp_servers": [
+      {
+        "name": "los",
+        "enable_tools": [
+          "get_credit_policy",
+          "get_application",
+          "run_verification",
+          "run_policy_check",
+          "get_bank_transactions",
+          "compute_offer",
+          "add_risk_flag",
+          "submit_recommendation",
+          "list_underwriting_queue",
+          "get_decision_case",
+          "record_credit_decision",
+          "list_documents",
+          "record_document_analysis",
+          "record_cashflow_check",
+          "get_disbursal_case",
+          "release_disbursal",
+          "get_document_crosscheck"
+        ],
+        "disable_tools": [],
+        "preload": true,
+        "preload_tools": [],
+        "require_approval_for_tools": ["record_credit_decision", "release_disbursal"]
+      }
+    ],
+    "skills": [],
+    "config": {
+      "iteration_limit": 100,
+      "sandbox": {
+        "enabled": true,
+        "file_downloads": true
+      },
+      "dynamic_sub_agents": {
+        "enabled": true
+      },
+      "context_management": {
+        "compaction": {
+          "enabled": true
+        },
+        "large_tool_response": {
+          "enabled": true
+        }
+      },
+      "generative_ui": {
+        "enabled": true
+      },
+      "ask_user_questions": {
+        "enabled": true
+      },
+      "web_search": {
+        "enabled": false
+      }
+    }
+  }
+}

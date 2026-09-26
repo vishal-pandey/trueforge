@@ -1,0 +1,15 @@
+{
+  "manifest": {
+    "type": "remote",
+    "name": "los",
+    "url": "${LOS_MCP_URL}",
+    "description": "Loan Origination System underwriting tools (masked applicant view, verifications, credit policy BRE, bank transactions, offer pricing, risk flags, recommendation submission). Agents recommend; humans decide. Decision tools require the signed-in underwriter's forwarded identity.",
+    "auth": {
+      "type": "header",
+      "headers": {
+        "Authorization": "Bearer ${LOS_MCP_AGENT_KEY}"
+      }
+    },
+    "forward_caller_identity": true
+  }
+}
