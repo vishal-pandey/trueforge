@@ -41,6 +41,8 @@ function entrySourceType(entry: SessionListEntry): 'schedule' | undefined {
   return 'sourceType' in entry && Reflect.get(entry, 'sourceType') === 'schedule' ? 'schedule' : undefined;
 }
 
+const SESSION_LIST_POLL_MS = 5_000;
+
 export function AgentSessions({ agentId, startTimestamp, endTimestamp, shareView }: AgentSessionsProps) {
   const sessionsServer = useAgentSessionsServer();
   const chatServer = useServer();
@@ -122,6 +124,34 @@ export function AgentSessions({ agentId, startTimestamp, endTimestamp, shareView
       cancelled = true;
     };
   }, [listRequest, sessionsServer]);
+
+  // Keep the list live: new sessions (e.g. an agent run a service account just started) and status changes appear
+  // without a reload. Refreshes only the first page and merges it in, so pagination and selection are untouched.
+  useEffect(() => {
+    if (listLoading || listFailed) return;
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      void sessionsServer
+        .listSessions(listRequest)
+        .then(page => {
+          if (cancelled) return;
+          setEntries(current => {
+            const fresh = new Map(page.data.map(entry => [entry.id, entry]));
+            const updated = current.map(entry => fresh.get(entry.id) ?? entry);
+            const known = new Set(current.map(entry => entry.id));
+            const added = page.data.filter(entry => !known.has(entry.id));
+            return added.length === 0 && updated.every((entry, i) => entry === current[i])
+              ? current
+              : [...added, ...updated];
+          });
+        })
+        .catch(() => undefined);
+    }, SESSION_LIST_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [listFailed, listLoading, listRequest, sessionsServer]);
 
   const loadMore = useCallback(async () => {
     // A ref, not `listLoadingMore`: the observer can fire twice before a re-render.

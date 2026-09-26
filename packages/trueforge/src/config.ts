@@ -539,6 +539,12 @@ export interface SharedServerConfiguration {
   LOG_LEVEL: string;
   /** Log one line per HTTP request (except `/healthz` and `/assets/`). Env: `ACCESS_LOGS`. Default true. */
   ACCESS_LOGS: boolean;
+  /**
+   * When true, admins' session listings (chat history, Sessions page, agent sessions) include every subject's
+   * sessions — e.g. to watch sessions a service account started while they run. Env: `ADMIN_LISTS_ALL_SESSIONS`.
+   * Default false (admins see their own and managed agents' sessions; `all_subjects=true` still opts in per call).
+   */
+  ADMIN_LISTS_ALL_SESSIONS: boolean;
   /** Node environment. Env: `NODE_ENV`. */
   NODE_ENV: string | undefined;
   /** HTTP port the server listens on. Env: `PORT`. */
@@ -856,6 +862,11 @@ const host = getEnv('HOST', { defaultValue: DEFAULT_HOST }) ?? DEFAULT_HOST;
 const shared: SharedServerConfiguration = {
   LOG_LEVEL: getEnv('LOG_LEVEL', { defaultValue: 'info' }) ?? 'info',
   ACCESS_LOGS: parseBoolean({ envKey: 'ACCESS_LOGS', raw: getEnv('ACCESS_LOGS'), defaultValue: true }),
+  ADMIN_LISTS_ALL_SESSIONS: parseBoolean({
+    envKey: 'ADMIN_LISTS_ALL_SESSIONS',
+    raw: getEnv('ADMIN_LISTS_ALL_SESSIONS'),
+    defaultValue: false,
+  }),
   NODE_ENV: getEnv('NODE_ENV'),
   PORT: port,
   HOST: host,

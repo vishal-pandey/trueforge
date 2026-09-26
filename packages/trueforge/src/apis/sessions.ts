@@ -489,7 +489,10 @@ export function createSessionsRouter(deps: SessionsRouterDeps) {
   const listSessionsHandler: RouteHandler<typeof listSessionsRoute> = async c => {
     const query = parseListSessionsQuery(honoQueriesToRecord(c.req.queries()));
     const requestContext = deps.resolveRequestContext(c);
-    const listAllSubjects = query.all_subjects === true && query.created_by_me !== true && hasAdminRole(requestContext);
+    const isAdmin = hasAdminRole(requestContext);
+    const listAllSubjects =
+      isAdmin &&
+      ((query.all_subjects === true && query.created_by_me !== true) || configuration.ADMIN_LISTS_ALL_SESSIONS);
     try {
       const managedAgentIds =
         query.created_by_me || listAllSubjects
