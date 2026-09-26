@@ -1,122 +1,260 @@
-> [!NOTE]
-> **Hackathon fork (TrueFoundry × Polaris, "Agents That Act").** This fork adds session assignment, caller-identity
-> forwarding to MCP, Generative UI form submit and a Kubernetes sandbox provider, and uses them for a micro-loan
-> underwriting agent that stops for a human before the credit decision and before money moves.
-> **Read [hackathon/README.md](hackathon/README.md)** · live at **https://trueforge.itl.it.com**
+# Micro-loan underwriter on TrueForge
 
-<p align="center">
-  <a href="https://trueforge.dev">
-    <picture>
-      <source srcset="./docs/assets/trueforge-black.svg" media="(prefers-color-scheme: light)">
-      <source srcset="./docs/assets/trueforge-white.svg" media="(prefers-color-scheme: dark)">
-      <img src="./docs/assets/trueforge-black.svg" alt="TrueForge logo">
-    </picture>
-  </a>
-</p>
-<p align="center">The open-source agent harness - the runtime layer that turns an LLM into a working agent</p>
+**TrueFoundry × Polaris hackathon: "Agents That Act".** An agent that underwrites unsecured business loans
+(₹25,000 – ₹5,00,000) for micro-enterprises end to end on the TrueForge harness. It reads the borrower's documents,
+works through a real loan system over MCP, recomputes cash flow with generated code in the sandbox, sends four
+specialist sub-agents out in parallel, and builds a decision screen with Generative UI. It then **stops twice for
+a human**: before the credit decision and before any money moves.
 
-<p align="center">
-  <a href="https://trendshift.io/repositories/155463?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-155463" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/155463/daily?language=TypeScript" alt="truefoundry%2Ftrueforge | Trendshift" width="250" height="55"/></a>
-</p>
+> This is a fork of [truefoundry/trueforge](https://github.com/truefoundry/trueforge), the open-source agent harness. The original TrueForge README is in [TRUEFORGE.md](TRUEFORGE.md).
 
-<p align="center">
-  <a href="https://github.com/truefoundry/trueforge/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" alt="License: MIT"></a>
-  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/Node.js-%3E%3D22.14-green.svg?style=flat-square" alt="Node.js >= 22.14"></a>
-  <a href="https://trueforge.dev"><img src="https://img.shields.io/badge/Documentation-trueforge.dev-blue.svg?style=flat-square" alt="Documentation"></a>
-  <a href="https://trueforge.dev/quickstart"><img src="https://img.shields.io/badge/Quickstart-trueforge.dev/quickstart-blue.svg?style=flat-square" alt="Quickstart"></a>
-  <a href="https://trueforge.dev/api/overview"><img src="https://img.shields.io/badge/SDK-trueforge.dev/api/overview-blue.svg?style=flat-square" alt="SDK"></a>
-</p>
-<p align="center">
-  <a href="https://www.npmjs.com/package/@truefoundry/trueforge"><img src="https://img.shields.io/npm/v/@truefoundry/trueforge?label=trueforge&logo=npm&style=flat-square" alt="npm @truefoundry/trueforge"></a>
-  <a href="https://www.npmjs.com/package/@truefoundry/trueforge-sdk"><img src="https://img.shields.io/npm/v/@truefoundry/trueforge-sdk?label=trueforge-sdk&logo=npm&style=flat-square" alt="npm @truefoundry/trueforge-sdk"></a>
-  <a href="https://www.npmjs.com/package/@truefoundry/trueforge-ui"><img src="https://img.shields.io/npm/v/@truefoundry/trueforge-ui?label=trueforge-ui&logo=npm&style=flat-square" alt="npm @truefoundry/trueforge-ui"></a>
-  <a href="https://www.npmjs.com/package/@truefoundry/trueforge-core"><img src="https://img.shields.io/npm/v/@truefoundry/trueforge-core?label=trueforge-core&logo=npm&style=flat-square" alt="npm @truefoundry/trueforge-core"></a>
-  <a href="https://tfy.jfrog.io/ui/packages/oci:%2F%2Ftrueforge"><img src="https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftruefoundry%2Ftrueforge%2Frefs%2Fheads%2Fmain%2Fcharts%2Ftrueforge%2FChart.yaml&query=%24.version&label=trueforge&logo=helm&style=flat-square" alt="helm trueforge"></a>
-  <a href="https://deepwiki.com/truefoundry/trueforge"><img src="https://deepwiki.com/badge.svg?style=flat-square" alt="Ask DeepWiki"></a>
-</p>
+> **Try it live:** **https://trueforge.itl.it.com**
+> Demo login: **`judge@itl.it.com`** / **`Judge-14be36e1-Tf26`** (sign in through Keycloak)
+>
+> The judge account is an **underwriter and operations user**, not a TrueForge admin. It sees the cases assigned to
+> it, can talk to the agent and can approve or deny the gated tools.
 
-# TrueForge
+- [The job](#the-job-and-why-its-worth-handing-over)
+- [How it works](#how-it-works)
+- [The harness doing the work](#the-harness-doing-the-work)
+- [Where it stops](#where-it-stops-and-why-there)
+- [What I changed in TrueForge](#what-i-changed-in-trueforge)
+- [The Kubernetes sandbox provider](#the-kubernetes-sandbox-provider)
+- [The agent: instructions, tools and MCP](#the-agent-instructions-tools-and-mcp)
+- [Try it yourself](#try-it-yourself)
+- [Honest notes](#honest-notes)
 
-TrueForge runs the agent execution loop for you - model calls, MCP tools, skills, sandboxing, approvals, context management, and session state - and exposes it three ways: a **chat UI**, an **HTTP API** with a TypeScript **SDK**, and an embeddable **UI SDK**.
+---
 
-![TrueForge Chat UI](./docs/images/hero.png)
+## The job, and why it's worth handing over
 
-## Why TrueForge?
+India has about 6.3 crore micro-enterprises: kirana stores, tailors, repair shops, food stalls. Most can't get a
+₹50,000 working-capital loan, because underwriting one by hand costs more than the loan earns. A credit analyst
+has to:
 
-Building an agent is easy. Running one well is not - you need streaming, session persistence, tool servers, sandboxing, approvals, and a UI. TrueForge gives you that out of the box:
+- read PAN, Aadhaar, address proof, ITR, bank statement and a shop photo, and check they belong to one person and
+  match the form;
+- pull KYC, bureau and bank data and go through 6–12 months of transactions (bounces, loan EMIs, round-tripping,
+  window dressing);
+- run the credit policy, price the loan (APR, instalment, fees) and write a credit memo;
+- hand it to someone with enough authority to approve it.
 
-- **Initial setup from catalogs** - configure [models](https://trueforge.dev/models), [MCP servers](https://trueforge.dev/mcp-servers), [skills](https://trueforge.dev/skills), and a [sandbox](https://trueforge.dev/sandbox) once; agents pick from what you connected. Presets come from shipped YAML catalogs you can customize.
-- **Any model provider** - OpenAI, Anthropic, Google Gemini, and other catalog providers, or any OpenAI-compatible endpoint.
-- **MCP tools** - remote MCP servers with header auth or OAuth, including in-chat authorization.
-- **Skills** - git-backed `SKILL.md` instruction packs, loaded on demand in the sandbox.
-- **Sandbox as a tool** - isolated code/file execution (Daytona today; more providers planned), provisioned only when needed. Secrets stay in the harness.
-- **Human checkpoints** - tool approval, ask-user-questions, and Generative UI in chat.
-- **Context engineering** - subagents, deferred tool loading, Code Mode, large-result offloading, and compaction.
-- **Chat UI + SDK** - use the bundled UI, automate with `@truefoundry/trueforge-sdk`, or embed `@truefoundry/trueforge-ui`.
+That is hours of repetitive, evidence-heavy reading per case, and a real NBFC credit team would gladly delegate it.
+What they won't delegate is the **decision** and the **money**. So the agent does all the reading and arithmetic,
+explains itself, and hands exactly those two actions to accountable humans.
 
-It scales down and up: **local mode** (one process, SQLite) or **hosted mode** (Postgres + Redis, Docker Compose, Helm, or Railway).
+## How it works
 
-## Getting started
+```mermaid
+flowchart LR
+  B[Borrower on phone<br/>/apply: OTP, consents,<br/>6 documents] -->|submit| W[Loan system<br/>durable workflow]
+  W -->|starts a session<br/>with documents attached| L
 
-### Quickstart with `npx`
+  subgraph TF[TrueForge harness]
+    L[Lead underwriter agent] -->|reads every document| L
+    L -->|parallel| S1[identity-kyc]
+    L -->|parallel| S2[income-cashflow]
+    L -->|parallel| S3[bureau]
+    L -->|parallel| S4[business]
+    S2 --> SB[(Sandbox<br/>Python via Code Mode)]
+    L --> G[Generative UI<br/>decision desk]
+  end
 
+  L <-->|17 MCP tools| LOS[(Loan system<br/>MCP server)]
+  SB <-->|call_tool| LOS
+  G --> H1{{STOP 1<br/>credit decision<br/>credit officer / manager}}
+  H1 -->|verified identity + authority| LOS
+  LOS --> K[KFS accepted by borrower<br/>with OTP] --> H2{{STOP 2<br/>disbursal release<br/>operations, four-eyes}}
+  H2 --> M[Lender pays the<br/>verified account]
 ```
-npx @truefoundry/trueforge@latest
+
+1. The borrower applies on their phone. The loan system starts a TrueForge session for the `los-underwriter`
+   agent, with the documents attached.
+2. **The lead agent reads every document.** It records type, quality, fields and tamper signs through
+   `record_document_analysis`, then asks the loan system to cross-check them
+   (`get_document_crosscheck`: are they one person, and do they match the form?).
+3. **Four specialist sub-agents run in parallel:** identity-kyc, income-cashflow, bureau and business. They share
+   the sandbox, and the cash-flow specialist writes and runs Python there.
+4. The lead reconciles their findings, runs the credit policy, prices the offer, raises risk flags, submits a
+   recommendation, and **builds a decision desk with Generative UI**.
+5. The loan system assigns the session to the least-loaded underwriter with enough authority. **Stop 1:** that
+   human decides.
+6. The borrower accepts the Key Fact Statement. A new session prepares the disbursal release. **Stop 2:** an
+   operations user releases the money.
+
+## The harness doing the work
+
+**A real tool, over MCP.** The agent works only through 17 tools on the loan system's MCP server (the live
+underwriting database, the policy engine, pricing, the workflow). Here is one real run: document reads, the
+cross-check, a shared case file written to the sandbox, then the four specialists.
+
+<img src="hackathon/images/02-tool-calls.png" width="620" alt="Agent steps: 31 tool calls, including four parallel sub-agents">
+
+**Parallel sub-agents.** Each specialist gets a self-contained brief from the lead. This is the cash-flow
+specialist's brief and its steps:
+
+<img src="hackathon/images/03-sub-agent-brief.png" width="620" alt="Brief given to the income-cashflow sub-agent">
+
+**Generated code in the sandbox.** The specialist writes Python and runs it in the sandbox. It pulls all 521 bank
+transactions from the loan system through **Code Mode** (`from mcp_client import call_tool`) and recomputes
+income, EMI, balances and ratios independently of the rules engine (`exit: 0`):
+
+<img src="hackathon/images/04-sandbox-code-mode.png" width="620" alt="Sandbox running generated Python that calls the LOS over MCP">
+
+**Generative UI.** The agent builds a decision desk for each case: key numbers, the policy table, risk flags,
+the document persona, the specialists' findings, the priced offer and a decision form.
+
+<img src="hackathon/images/05-genui-policy.png" width="480" alt="Generated decision desk: policy results"> <img src="hackathon/images/06-genui-decision-form.png" width="480" alt="Generated decision form">
+
+**Holding for a person.** When the underwriter submits, the agent calls `record_credit_decision`, and TrueForge
+stops and waits:
+
+<img src="hackathon/images/07-approval-gate.png" width="620" alt="Tool Approval Required for record_credit_decision: Allow / Deny">
+
+**Traced.** Every run is visible in TrueForge: turns, duration, tokens, tool calls, sub-agents, errors, with the
+four specialists running in parallel on the timeline.
+
+<img src="hackathon/images/08-session-trace.png" width="900" alt="Session trace: 3 turns, 1.3M tokens, 51 tool calls, 4 sub-agents, 0 errors">
+
+The agent's configuration: sandbox, dynamic sub-agents, Generative UI, and 17 LOS tools of which 2 are
+approval-gated.
+
+<img src="hackathon/images/01-agent-overview.png" width="900" alt="los-underwriter agent overview in TrueForge">
+
+## Where it stops, and why there
+
+The agent can read, compute, verify, flag, price and recommend. It can **never** do either of these two things on
+its own:
+
+| Stop                                                  | Tool                     | Who approves                                                                                                              | Why this line                                                                                                                                                                     | How it's enforced                                                                                                                                                                                                                                                                           | If the agent gets it wrong                                                                                                      |
+| ----------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| **1. Credit decision** (approve / reject / send back) | `record_credit_decision` | A **credit officer** (≤ ₹1 L, no deviations), **credit manager** (≤ ₹3 L or any deviation) or **head of credit** (≤ ₹5 L) | It binds the lender and triggers a legal offer (the RBI Key Fact Statement) to the borrower. RBI expects credit decisions to have human, delegated authority and maker ≠ checker. | TrueForge **tool approval** (Allow / Deny). The fork forwards the signed-in human's own Keycloak token to the MCP server; the LOS verifies it, checks their role against the amount and deviations, rejects the agent as maker and checker, and re-checks the policy on the approved terms. | Nothing happens without the click. A wrong recommendation is still just a recommendation, and every step is in the audit trail. |
+| **2. Disbursal release**                              | `release_disbursal`      | An **operations** user, and with **four-eyes** not the person who approved the credit                                     | Money leaving the lender is the only irreversible step.                                                                                                                           | A separate session the agent prepares with a checklist (accepted KFS, penny-drop-verified beneficiary, e-sign, mandate). Tool approval, the operations role, the KFS number typed by the human, and four-eyes. The workflow cannot pay without it.                                          | The release is refused. Nothing is paid.                                                                                        |
+
+The agent also can't talk to the borrower or skip a missing document. Unreviewed documents, identity mismatches
+and missing income proof become policy rules the human sees (`MISSING` or `DEVIATION`).
+
+## What I changed in TrueForge
+
+All changes are in this fork on top of upstream `truefoundry/trueforge`
+([full diff](https://github.com/vishal-pandey/trueforge/compare/de68a164...main)). The server image
+`ghcr.io/vishal-pandey/trueforge:v0.0.6` and the sandbox image `ghcr.io/vishal-pandey/trueforge-sandbox:v0.0.5`
+are public.
+
+| Change                                      | Commit                                                                                                                                                                                                                                                                                                                                                                           | What it adds                                                                                                                                                                                                                                  | Why the underwriter needs it                                                                              |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| **Session assignment**                      | [`23344ba4`](https://github.com/vishal-pandey/trueforge/commit/23344ba4)                                                                                                                                                                                                                                                                                                         | `POST /api/v1/sessions/{id}/assign` hands a session to another user. Allowed for admins or the new `OIDC_SESSION_ASSIGNER_ROLE_VALUE` role; refused while a turn is running.                                                                  | The loan system routes each case to the right underwriter by authority, and escalates on SLA breach.      |
+| **Admin read of any session**               | [`23344ba4`](https://github.com/vishal-pandey/trueforge/commit/23344ba4)                                                                                                                                                                                                                                                                                                         | Admins can read (not write) any session; `GET /sessions?all_subjects=true`.                                                                                                                                                                   | Supervision of the credit team.                                                                           |
+| **Caller identity forwarded to MCP**        | [`23344ba4`](https://github.com/vishal-pandey/trueforge/commit/23344ba4), [`b48dd455`](https://github.com/vishal-pandey/trueforge/commit/b48dd455)                                                                                                                                                                                                                               | A remote MCP server can opt in with `forward_caller_identity`. Its connections then carry `X-TrueForge-User-Token`, `-User`, `-Session-Id` and `-Turn-Id`: the human who sent the turn, never sent to the model. Settings UI toggle included. | The loan system can prove _which human_ approved a gated tool. An agent can't impersonate an underwriter. |
+| **Generative UI forms submit to the agent** | [`81c612dc`](https://github.com/vishal-pandey/trueforge/commit/81c612dc)                                                                                                                                                                                                                                                                                                         | A form's action button sends the form values back to the agent as a user message.                                                                                                                                                             | The decision desk form.                                                                                   |
+| **Kubernetes sandbox provider**             | [`dfa210cc`](https://github.com/vishal-pandey/trueforge/commit/dfa210cc), [`b34c10b7`](https://github.com/vishal-pandey/trueforge/commit/b34c10b7), [`ab9e976b`](https://github.com/vishal-pandey/trueforge/commit/ab9e976b), [`b0a480ad`](https://github.com/vishal-pandey/trueforge/commit/b0a480ad), [`e070fce3`](https://github.com/vishal-pandey/trueforge/commit/e070fce3) | Sandboxes run as pods on your own cluster. [Details below](#the-kubernetes-sandbox-provider).                                                                                                                                                 | Generated code runs isolated on the homelab, not on the server.                                           |
+| **Release pipeline and images**             | [`a60c0bf6`](https://github.com/vishal-pandey/trueforge/commit/a60c0bf6), [`05366312`](https://github.com/vishal-pandey/trueforge/commit/05366312), [`5f9769e1`](https://github.com/vishal-pandey/trueforge/commit/5f9769e1)                                                                                                                                                     | CI builds the server from source plus a non-root sandbox image, and publishes them to GHCR.                                                                                                                                                   | Deployment.                                                                                               |
+| Test fixes                                  | [`3a5e6699`](https://github.com/vishal-pandey/trueforge/commit/3a5e6699)                                                                                                                                                                                                                                                                                                         |                                                                                                                                                                                                                                               |                                                                                                           |
+
+Key files: `packages/trueforge/src/routes/sessionRoutes.ts` (assign, admin reads),
+`packages/trueforge/src/runtime/sessionResources.ts` and `src/schemas/mcpServer.ts` (identity forwarding),
+`packages/trueforge-core/src/core/capabilities/builtins/OpenUI.ts` (form submit),
+`packages/trueforge-core/src/core/sandbox/provider/kubernetes/` (sandbox provider).
+
+## The Kubernetes sandbox provider
+
+Upstream TrueForge runs sandboxes locally or on hosted providers. This fork adds a **server-managed Kubernetes
+provider** backed by [agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) (v1.0.3). Each agent session
+gets its own sandbox pod in a dedicated namespace, running a **non-root** image:
+
+```bash
+KUBERNETES_SANDBOX_ENABLED=true
+KUBERNETES_SANDBOX_NAMESPACE=trueforge-sandboxes
+KUBERNETES_SANDBOX_IMAGE=ghcr.io/vishal-pandey/trueforge-sandbox:v0.0.5
+KUBERNETES_SANDBOX_IDLE_TTL_MINUTES=60
 ```
 
-Use the [Quickstart](https://trueforge.dev/quickstart) guide to run TrueForge using various methods (Local, Docker Compose, Kubernetes, or Railway). Connect models, tools, skills and build your first reusable agent.
+- **Commands and files** go through the Kubernetes exec API (`execArgv.ts`); the sandbox manifest is built in
+  `sandboxManifest.ts`.
+- **Code Mode** works in these pods. The server connects to a NATS bridge on the pod, so Python inside the sandbox
+  can `from mcp_client import call_tool` and reach the agent's MCP servers. The cash-flow specialist uses this to
+  pull every bank transaction without flooding the model's context.
+- **Sub-agents share the lead's sandbox**, which is how the lead's case file reaches the specialists.
+- Idle sandboxes are cleaned up after the TTL. The Settings UI shows the managed provider read-only.
 
-To work on TrueForge from this repository, see [CONTRIBUTING.md](CONTRIBUTING.md).
+Design and plan: [`docs/superpowers/specs/2026-09-24-kubernetes-sandbox-design.md`](docs/superpowers/specs/2026-09-24-kubernetes-sandbox-design.md),
+[`docs/superpowers/plans/2026-09-24-kubernetes-sandbox-provider.md`](docs/superpowers/plans/2026-09-24-kubernetes-sandbox-provider.md).
 
-## Architecture
+## The agent: instructions, tools and MCP
 
-<p align="center">
-  <picture>
-    <source srcset="./docs/assets/architecture-dark.svg" media="(prefers-color-scheme: dark)">
-    <source srcset="./docs/assets/architecture-light.svg" media="(prefers-color-scheme: light)">
-    <img src="./docs/assets/architecture-light.svg" alt="TrueForge architecture: Chat UI and SDK connect to the TrueForge server HTTP API and agent loop, which talks to SQLite or Postgres and bring-your-own models, MCP servers, and sandbox" width="920">
-  </picture>
-</p>
+Everything that defines the agent is in [`hackathon/los-underwriter/`](hackathon/los-underwriter). An admin or the core credit team
+changes the agent's behaviour by editing these files and re-running the bootstrap, not by changing code.
 
-| Mode   | Best for                    | Storage  | Extra infra      | How to run                       |
-| ------ | --------------------------- | -------- | ---------------- | -------------------------------- |
-| Local  | Personal use, trying it out | SQLite   | None             | `npx @truefoundry/trueforge`     |
-| Hosted | Teams, multi-replica        | Postgres | Postgres + Redis | Docker Compose, Helm, or Railway |
+| File                                                                                       | What it is                                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`agent.json`](hackathon/los-underwriter/agent.json)                                       | TrueForge manifest: model, the `los` MCP server with its tool allowlist, **`require_approval_for_tools: ["record_credit_decision", "release_disbursal"]`**, sandbox, dynamic sub-agents, Generative UI, large-tool-response offloading, iteration limit. |
+| [`instructions.md`](hackathon/los-underwriter/instructions.md)                             | The playbook: read every document → scrutiny → four parallel specialists → reconcile → recommend → decision desk → record only the human's decision → disbursal release. Hard rules on knock-outs, missing data, privacy and conduct.                    |
+| [`skills/credit-policy/SKILL.md`](hackathon/los-underwriter/skills/credit-policy/SKILL.md) | How to read a micro-enterprise bank statement: turnover vs income, margins, seasonality, window dressing.                                                                                                                                                |
+| [`mcp-servers/los.json`](hackathon/los-underwriter/mcp-servers/los.json)                   | The MCP server registration: remote streamable-HTTP, bearer auth, **`forward_caller_identity: true`**.                                                                                                                                                   |
+| [`bootstrap.py`](hackathon/los-underwriter/bootstrap.py)                                   | Registers the MCP server and the agent in TrueForge through its API (idempotent); `--local` targets a standalone `npx @truefoundry/trueforge`.                                                                                                           |
 
-> **Local mode is for your machine only.** It is a convenient way to try TrueForge — not a production or internet-facing setup. There is no login by default, and data lives in a local SQLite file. Please keep it on localhost. We cannot take responsibility for data loss or unauthorized access if local mode is used beyond that. For a shared or production deployment, use hosted mode.
+### The loan system's MCP tools
 
-## Documentation
+The agent uses these 17 tools. PII is masked before it reaches the model: initials, age band, PAN last 5, Aadhaar
+last 4, and pseudonymous bank counterparties. The two gated tools also verify the forwarded human identity.
 
-| Section                                                             | What you'll find                                                  |
-| ------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| [Introduction](https://trueforge.dev/introduction)                  | What an agent harness is and how TrueForge fits together          |
-| [Quickstart](https://trueforge.dev/quickstart)                      | Run local or hosted, build your first agent                       |
-| [Initial Setup](https://trueforge.dev/harness/initial-setup)        | Models, MCP, skills, sandbox - catalogs and overrides             |
-| [Create an Agent](https://trueforge.dev/create-agent/overview)      | Select resources; tool approval, questions, Generative UI         |
-| [Sessions](https://trueforge.dev/sessions)                          | Inspect past runs: turns, tool calls, subagents, tokens, timing   |
-| [Schedules](https://trueforge.dev/schedules)                        | Run a saved agent on a recurring cadence, unattended              |
-| [Harness Capabilities](https://trueforge.dev/key-features/overview) | Sandbox-as-tool, subagents, deferred tools, Code Mode, compaction |
-| [Setup Login](https://trueforge.dev/authentication/overview)        | Optional OIDC for shared deployments                              |
-| [Benchmarking](https://trueforge.dev/benchmarking)                  | Cost/accuracy vs Claude Managed Agents and deepagents             |
-| [SDK](https://trueforge.dev/api/overview)                           | TypeScript client: sessions, turns, events                        |
-| [Chat UI](https://trueforge.dev/chat-ui)                            | Bundled UI and embedding `@truefoundry/trueforge-ui`              |
-| [API Reference](https://trueforge.dev/api-reference)                | OpenAPI paths and schemas                                         |
+| Tool                       | Gate                                   | What it does                                                                                                                                                                                                                                                      |
+| -------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `get_credit_policy`        | Agent                                  | The credit policy for this application's product: thresholds, pricing grid, delegation matrix. Read this before recommending.                                                                                                                                     |
+| `get_application`          | Agent                                  | Full underwriting view of one application: ask, masked applicant, business, household, verification results, latest policy assessment (rules, eligibility, bureau summary, cash-flow metrics) and risk flags.                                                     |
+| `list_documents`           | Agent                                  | Documents uploaded for the application (shop photos, invoice/quotation, bank statement, Udyam/GST certificates) with the Document AI analysis: detected type, quality, extracted fields, consistency checks against the application, tamper suspicion,…           |
+| `record_document_analysis` | Agent                                  | Record YOUR analysis of one attached document (you see the documents attached to the first message; file names are DOCTYPE__documentid). Required for every document before a credit decision: the credit policy uses these findings (tampering and…              |
+| `get_document_crosscheck`  | Agent                                  | Document scrutiny result computed by the LOS from the fields you recorded with record_document_analysis: completeness against the required documents (PAN, Aadhaar, income proof = bank statement or ITR, address proof, shop photo), documents not yet…          |
+| `run_verification`         | Agent                                  | Run (or re-run) one external verification. Idempotent to call; each run is recorded. Kinds: PAN, AADHAAR_OKYC, BUREAU, ACCOUNT_AGGREGATOR, PENNY_DROP, UDYAM, GST.                                                                                                |
+| `run_policy_check`         | Agent                                  | Run the credit policy (business rules engine) for the application, optionally on alternative terms. Returns outcome, every rule with PASS/FAIL/DEVIATION/MISSING, eligible amount and max instalment. FAIL rules are knock-outs a human cannot approve through.   |
+| `get_bank_transactions`    | Agent                                  | Bank transactions from the Account Aggregator fetch, for investigating specific signals (bounces, round-tripping, EMI debits, spikes). Counterparties are pseudonymous keys. Most recent first.                                                                   |
+| `record_cashflow_check`    | Agent                                  | Record the cash-flow figures YOU recomputed with code in the sandbox from the raw bank transactions (independent of the LOS rules engine), and every material difference from run_policy_check's cash-flow numbers. Shown to the human underwriter on the…        |
+| `compute_offer`            | Agent                                  | Price an offer: instalment, charges, net disbursal, total repayable and APR (RBI KFS method). Pure calculation — nothing is saved.                                                                                                                                |
+| `add_risk_flag`            | Agent                                  | Raise a risk flag a human reviewer must see (e.g. suspected round-tripping, business not matching declared category, possible over-indebtedness).                                                                                                                 |
+| `submit_recommendation`    | Agent                                  | Submit your underwriting recommendation with a credit memo. This does NOT decide the loan: it opens a credit-decision task for a human with the right delegated authority. APPROVE needs amount, tenure and frequency within the latest eligibility. The memo…    |
+| `list_underwriting_queue`  | Agent                                  | Applications waiting for underwriting (status UNDERWRITING or DATA_COLLECTION), oldest first.                                                                                                                                                                     |
+| `get_decision_case`        | Agent                                  | Everything a human underwriter needs to decide one application: masked case view, policy results with deviations, the agent recommendation and credit memo, priced offer (instalment, APR, net disbursal), risk flags, the authority required, and reject reason… |
+| `record_credit_decision`   | **Human approval + verified identity** | Record the human underwriter's credit decision. Only works in a turn sent by the signed-in underwriter (their identity is verified by the LOS, not taken from you) and requires their delegated authority. APPROVED: pass final terms and acknowledge every…      |
+| `get_disbursal_case`       | Agent                                  | Everything an operations user checks before money leaves: accepted sanction/KFS (net disbursal, APR), masked beneficiary account with penny-drop name match, eSign + mandate status, who approved the credit, four-eyes rule, and `blockers` (must be empty to…   |
+| `release_disbursal`        | **Human approval + verified identity** | IRREVERSIBLE: release the loan disbursal to the lender. Only works in a turn sent by the signed-in operations user (identity verified by the LOS), in the session assigned for the release, with no blockers, and with the KFS number the user confirmed. With…   |
 
-## Benchmarks
+Metrics for the agent across runs:
 
-We compare TrueForge against Claude Managed Agents and deepagents on the same tasks, tools, and model - same accuracy, lower cost. Reproduce it from [`benchmark/`](benchmark/). Write-up: [Benchmarking](https://trueforge.dev/benchmarking).
+<img src="hackathon/images/09-agent-metrics.png" width="900" alt="los-underwriter metrics in TrueForge">
 
-## Contributing
+## Try it yourself
 
-We love contributions - bug reports, features, and docs fixes. See [CONTRIBUTING.md](CONTRIBUTING.md) and our [Code of Conduct](CODE_OF_CONDUCT.md). Fork PRs should change source only; maintainers regenerate the SDK after merge.
+**On the hosted instance** (https://trueforge.itl.it.com, login above):
 
-To report a security vulnerability, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
+1. **Create a case as a borrower.** Open **https://los.itl.it.com/apply** on your phone or laptop:
+   - Fill the form. The OTP is shown on screen, because this is a test environment and no SMS is sent.
+   - Upload any PAN, Aadhaar (masked), address proof, ITR or bank statement, and a shop photo. Sample or specimen
+     images are fine.
+   - The mock bureau and bank profiles depend on the **4th digit of the PAN**: 0–5 clean, 6 thin file with a late
+     payment, 7 low score, 8 new to credit, 9 write-off (a knock-out).
+2. Wait about 5 minutes. The agent reads, verifies and recommends. The case is then assigned to the least-loaded
+   underwriter with enough authority. That's either `judge@itl.it.com` or the author, so if it doesn't appear
+   under **Sessions**, submit another application.
+3. Open the session. Expand **Agent steps** to see the tool calls, the four `Sub-agent:` rows and the sandbox code.
+   Use the decision desk, or type your decision (for example "approve ₹50,000, 12 months, monthly, 26%,
+   deviations X, Y; comments …"), then **Allow** or **Deny** the gated tool.
 
-## Talk to us
+**With your own TrueForge:** run `npx @truefoundry/trueforge` and register the agent with
+`uv run --with httpx hackathon/los-underwriter/bootstrap.py --local --model <provider/model>`. The fork-only
+features (assignment and identity forwarding) degrade gracefully: the loan system can run in a local mode where
+TrueForge's approval click stands in for the verified human. The loan system itself is a separate, private
+repository, so self-hosting needs your own MCP server with these tool contracts. The hosted instance is the
+fastest way to see it working.
 
-- [Community Discord](https://discord.com/invite/fHeGRvakb)
-- Founder emails: [abhishek@truefoundry.com](mailto:abhishek@truefoundry.com) / [anuraag@truefoundry.com](mailto:anuraag@truefoundry.com)
+## Honest notes
 
-## License
-
-TrueForge is released under the [MIT License](LICENSE).
+- **The loan system is private.** This repo contains the harness changes and the agent definition; the MCP server
+  the agent talks to runs at `los.itl.it.com`.
+- **Mocked vendors.** KYC, credit bureau, e-sign, mandate and the lender's disbursal API are deterministic sandbox
+  adapters. Those are regulated integrations that need NBFC contracts. A real Account Aggregator adapter (Setu) is
+  built, but it's off in this environment because the provider's sandbox login doesn't accept test OTPs yet.
+- **Known issue:** a Generative UI form only submits the fields the user touched, so prefilled values are missing.
+  The agent then asks for them explicitly rather than guessing. Typing the decision in chat works.
+- **Built with AI assistants:** Claude Code (Anthropic Claude) was the pair programmer for the harness changes,
+  the loan system and this write-up. The underwriting agent runs on an OpenAI GPT-5-class model configured in
+  TrueForge. No API keys are committed.
