@@ -14,6 +14,8 @@ a human**: before the credit decision and before any money moves.
 > The judge account is an **underwriter and operations user**, not a TrueForge admin. It sees the cases assigned to
 > it, can talk to the agent and can approve or deny the gated tools.
 
+> **AI assistance:** built with [Claude Code](https://claude.com/claude-code) (Anthropic). [Details](#built-with-claude-code).
+
 - [The job](#the-job-and-why-its-worth-handing-over)
 - [How it works](#how-it-works)
 - [The harness doing the work](#the-harness-doing-the-work)
@@ -22,6 +24,7 @@ a human**: before the credit decision and before any money moves.
 - [The Kubernetes sandbox provider](#the-kubernetes-sandbox-provider)
 - [The agent: instructions, tools and MCP](#the-agent-instructions-tools-and-mcp)
 - [Try it yourself](#try-it-yourself)
+- [Built with Claude Code](#built-with-claude-code)
 - [Honest notes](#honest-notes)
 
 ---
@@ -291,6 +294,21 @@ TrueForge's approval click stands in for the verified human. The loan system its
 repository, so self-hosting needs your own MCP server with these tool contracts. The hosted instance is the
 fastest way to see it working.
 
+## Built with Claude Code
+
+We declare our AI assistance: **this project was built with [Claude Code](https://claude.com/claude-code)**,
+Anthropic's coding agent (Claude Opus), as the main pair programmer. We used it for:
+
+- the TrueForge harness changes in this fork (session assignment, caller-identity forwarding to MCP, Generative UI
+  form submit, the Kubernetes sandbox provider) and their tests;
+- the loan system behind the MCP server: the tools, credit policy engine, document cross-check, durable workflow and
+  borrower app;
+- the `los-underwriter` agent's instructions and bootstrap, the deployment, this README and the demo video.
+
+Design decisions, review and testing on the live system were ours. The **underwriting agent itself** runs inside
+TrueForge on an **OpenAI GPT-5-class model**; Claude Code was the development tool, not part of the runtime. No API
+keys are committed.
+
 ## Honest notes
 
 - **The loan system is private.** This repo contains the harness changes and the agent definition; the MCP server
@@ -300,6 +318,3 @@ fastest way to see it working.
   built, but it's off in this environment because the provider's sandbox login doesn't accept test OTPs yet.
 - **Known issue:** a Generative UI form only submits the fields the user touched, so prefilled values are missing.
   The agent then asks for them explicitly rather than guessing. Typing the decision in chat works.
-- **Built with AI assistants:** Claude Code (Anthropic Claude) was the pair programmer for the harness changes,
-  the loan system and this write-up. The underwriting agent runs on an OpenAI GPT-5-class model configured in
-  TrueForge. No API keys are committed.
